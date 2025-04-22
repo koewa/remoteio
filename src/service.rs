@@ -22,7 +22,9 @@ async fn broadcast_task(tx: Sender<String>, name: &str) {
     }
 }
 
-pub fn setup_broadcaster(tx: Sender<String>) {
+pub struct Service {}
+
+pub fn setup_broadcaster(tx: Sender<String>) -> Service {
     let tx_clone = tx.clone();
     tokio::spawn(async {
         broadcast_task(tx_clone, "first").await;
@@ -30,4 +32,6 @@ pub fn setup_broadcaster(tx: Sender<String>) {
     tokio::spawn(async {
         broadcast_task(tx, "second").await;
     });
+
+    Service {}
 }
