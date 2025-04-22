@@ -26,6 +26,7 @@ mod broadcaster;
 // * handle errors (no unwrap/expect)
 // * return json messages instead of strings
 // * move code into modules
+// * forward messages received from ws to broadcaster
 
 #[derive(Debug)]
 enum ServerState {
