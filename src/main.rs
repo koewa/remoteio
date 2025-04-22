@@ -1,8 +1,12 @@
-use axum::Router;
+use axum::{routing::get, Router};
 use tower_http::services::ServeFile;
 use tokio::net::TcpListener;
 use std::{net::IpAddr,net::Ipv4Addr, net::SocketAddr};
 use axum::routing::get_service;
+
+use axum::extract::ws::Message;
+use axum::extract::ws::WebSocket;
+use axum::extract::ws::WebSocketUpgrade;
 
 // todo
 // * handle errors (no unwrap/expect)
@@ -29,17 +33,6 @@ use axum::routing::get_service;
 //    Json(ApiResponse {
 //        message: format!("Hello from Rocket REST API! - {}", state.nbr_of_calls).to_string(),
 //    })
-//}
-//
-//#[get("/")]
-//async fn root() -> NamedFile {
-//    index().await
-//}
-//
-//#[get("/index.html")]
-//async fn index() -> Response {
-//    Response
-//    Html("src/index.html").await.unwrap()
 //}
 //
 //#[get("/ws")]
@@ -81,6 +74,39 @@ use axum::routing::get_service;
 //    }
 //}
 
+async fn websocket_handler(ws: WebSocketUpgrade) -> impl axum::response::IntoResponse {
+        ws.on_upgrade(handle_socket)
+}
+
+async fn handle_socket(mut socket: WebSocket) {
+    // Send a greeting message to the client
+    if let Err(e) = socket.send(Message::Text("Hello from the server!".into())).await {
+        eprintln!("Error sending message: {}", e);
+        return;
+    }
+
+    // Loop to keep the connection alive
+    while let Some(Ok(msg)) = socket.recv().await {
+        match msg {
+            Message::Text(msg) => {
+                println!("Received message: {}", msg);
+                if let Err(e) = socket.send(Message::Text(format!("Echo: {}", msg).into())).await {
+                    eprintln!("Error sending message: {}", e);
+                }
+            }
+            Message::Close(_) => {
+                println!("Closing WebSocket connection.");
+                break;
+            }
+            _ => {}
+        }
+    }
+}
+
+async fn root_handler() -> &'static str {
+    "Hello, world!"
+}
+
 #[tokio::main]
 async fn main() {
     // let state = Status{nbr_of_calls: 0, state: ServerState::Disconnected};
@@ -104,8 +130,10 @@ async fn main() {
     println!("started server on http://{}", addr);
 
     let router = Router::new()
-        .route("/", get_service(ServeFile::new("src/index.html")));
-    
+        .route("/", get_service(ServeFile::new("src/index.html")))
+        .route("/api", get(root_handler))
+        .route("/ws", get(websocket_handler));
+
     axum::serve(listener, router.into_make_service())
         .await
         .unwrap();
