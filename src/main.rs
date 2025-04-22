@@ -39,7 +39,8 @@ enum ServerState {
 
 struct Status {
     state: ServerState,
-    nbr_of_calls: u32
+    nbr_of_calls: u32,
+    rx: Sender<String>,
 }
 
 //#[get("/api")]
@@ -89,18 +90,18 @@ async fn broadcast_task(tx: Sender<String>) {
     }
 }
 
-async fn websocket_handler( State(state): State<Sender<String>>, ws: WebSocketUpgrade,) -> impl IntoResponse {
+async fn websocket_handler(State(state): State<Arc<Mutex<Status>>>, ws: WebSocketUpgrade,) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
-async fn handle_socket(mut socket: WebSocket, channel: Sender<String>) {
+async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
     // Send a greeting message to the client
     if let Err(e) = socket.send(Message::Text("Hello from the server!".into())).await {
         eprintln!("Error sending message: {}", e);
         return;
     }
 
-    let mut rx = channel.subscribe();
+    let mut rx = state.lock().await.rx.subscribe();
     // Loop to keep the connection alive
     loop {
         tokio::select! {
@@ -108,6 +109,9 @@ async fn handle_socket(mut socket: WebSocket, channel: Sender<String>) {
                 match msg {
                     Message::Text(msg) => {
                         println!("Received message: {}", msg);
+                        let mut count = state.lock().await.nbr_of_calls;
+                        count = count + 1;
+                        state.lock().await.nbr_of_calls = count;
                         if let Err(e) = socket.send(Message::Text(format!("Echo: {}", msg).into())).await {
                             eprintln!("Error sending message: {}", e);
                         }
@@ -127,16 +131,17 @@ async fn handle_socket(mut socket: WebSocket, channel: Sender<String>) {
     }
 }
 
-async fn root_handler() -> &'static str {
-    "Hello, world!"
+async fn root_handler(State(state): State<Arc<Mutex<Status>>>) -> String {
+    let count = state.lock().await.nbr_of_calls;
+    format!("Hello, world! {}", count)
 }
 
 #[tokio::main]
 async fn main() {
-    let state = Arc::new(Mutex::new(Status{nbr_of_calls: 0, state: ServerState::Disconnected}));
     let (tx, _) = channel::<String>(10);
-
     let tx_clone = tx.clone();
+    let state = Arc::new(Mutex::new(Status{nbr_of_calls: 0, state: ServerState::Disconnected, rx: tx}));
+
     tokio::spawn(async move {
         broadcast_task(tx_clone).await;
     });
@@ -149,9 +154,8 @@ async fn main() {
     let router = Router::new()
         .route("/", get_service(ServeFile::new("src/index.html")))
         .route("/api", get(root_handler))
-        .with_state(state)
         .route("/ws", get(websocket_handler))
-        .with_state(tx);
+        .with_state(state);
 
     axum::serve(listener, router.into_make_service())
         .await
