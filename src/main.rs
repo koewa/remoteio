@@ -6,6 +6,9 @@ use rocket::tokio::{self, time::{sleep, Duration}};
 use rocket::fs::NamedFile;
 use rocket::State;
 
+// todo
+// * handle errors (no unwrap/expect)
+
 // Struct for the REST API response
 #[derive(Serialize)]
 struct ApiResponse {
@@ -35,7 +38,8 @@ fn ws_handler(ws: ws::WebSocket, state: & State<Sender<String>>) -> ws::Channel<
                 Some(message) = stream.next() => {
                     let message_done = message.expect("something wrong with message");
                     println!("Received from client: {}", message_done);
-                    let _ = stream.send(message_done).await;
+                    let result = format!("server received: {message_done}");
+                    let _ = stream.send(ws::Message::Text(result)).await;
                 }
 
                 Ok(msg) = rx.recv() => {
@@ -54,7 +58,6 @@ async fn broadcast_task(tx: Sender<String>) {
         let message = "Server broadcast: Hello to all WebSocket clients!".to_string();
         println!("Broadcasting message: {}", message);
 
-        // Send the message to all WebSocket clients
         if let Err(_) = tx.send(message) {
             println!("No active WebSocket clients to send the message to.");
         }
@@ -63,16 +66,13 @@ async fn broadcast_task(tx: Sender<String>) {
 
 #[rocket::launch]
 async fn rocket() -> _ {
-    // Create a broadcast channel for notifications
     let (tx, _) = channel::<String>(10);
 
-    // Spawn the periodic broadcast task
     let tx_clone = tx.clone();
     tokio::spawn(async move {
         broadcast_task(tx_clone).await;
     });
 
-    // Rocket instance
     rocket::build()
         .manage(tx)
         .mount("/", routes![api, index, ws_handler])

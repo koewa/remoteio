@@ -1,18 +1,32 @@
 <!DOCTYPE html>
 <html>
     <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
         <title>WebSocket Test</title>
     </head>
     <body>
         <h1>WebSocket Test</h1>
+
+        <label for="textField">Enter some text:</label>
+        <input type="text" id="textField" placeholder="Type something...">
+        <button id="sendButton">Send to WebSocket</button>
+
+        <h2>Messages from WebSocket:</h2>
+        <textarea id="messageArea" rows="10" cols="50" readonly></textarea>
+
         <script type="text/javascript">
             let socket = new WebSocket("ws://" + window.location.host + "/ws");
 
             socket.onmessage = function(event) {
                 console.log("Message from server: ", event.data);
+                const messageArea = document.getElementById("messageArea");
+                messageArea.value += event.data + "\n";
             };
 
             socket.onopen = function() {
+                document.getElementById("messageArea").value = "";
                 console.log("WebSocket connection opened");
                 socket.send("Hello from the browser!");
             };
@@ -20,6 +34,21 @@
             socket.onclose = function() {
                 console.log("WebSocket connection closed");
             };
+
+            socket.onerror = function(error) {
+                console.error("WebSocket error:", error);
+            };
+
+            document.getElementById("sendButton").addEventListener("click", function() {
+                const text = document.getElementById("textField").value;
+
+                if (socket.readyState === WebSocket.OPEN) {
+                    socket.send(text);
+                    console.log("Sent text:", text);
+                } else {
+                    console.log("WebSocket is not open.");
+                }
+            });
         </script>
     </body>
 </html>
