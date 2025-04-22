@@ -27,6 +27,7 @@ use tokio::sync::Mutex;
 // * handle errors (no unwrap/expect)
 // * return json messages instead of strings
 // * configure connected/disconnected state of ws
+// * move code into modules
 
 enum ServerState {
     Connected,
