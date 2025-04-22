@@ -1,4 +1,3 @@
-use async_std::task;
 use axum::{
     response::IntoResponse,
     routing::{
@@ -17,11 +16,11 @@ use axum::{
 };
 use std::net::{IpAddr,Ipv4Addr,SocketAddr};
 use std::sync::Arc;
-use std::time::Duration;
 use tower_http::services::ServeFile;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast::{channel, Sender};
 use tokio::sync::Mutex;
+mod broadcaster;
 
 // todo
 // * handle errors (no unwrap/expect)
@@ -38,19 +37,6 @@ struct Status {
     state: ServerState,
     nbr_of_calls: u32,
     tx: Sender<String>,
-}
-
-//// Task that broadcasts a message every 10 seconds
-async fn broadcast_task(tx: Sender<String>, name: &str) {
-    loop {
-        task::sleep(Duration::from_secs(1)).await;
-        let message = format!("Server broadcast: Hello from {} to all WebSocket clients!", name).to_string();
-        println!("Broadcasting message: {}, from {}", message, name);
-
-        if let Err(_) = tx.send(message) {
-            println!("No active WebSocket clients to send the message to ({}).", name);
-        }
-    }
 }
 
 async fn websocket_handler(State(state): State<Arc<Mutex<Status>>>, ws: WebSocketUpgrade,) -> impl IntoResponse {
@@ -110,13 +96,7 @@ async fn main() {
     let (tx, _) = channel::<String>(10);
     let state = Arc::new(Mutex::new(Status{nbr_of_calls: 0, state: ServerState::Disconnected, tx: tx.clone()}));
 
-    let tx_clone = tx.clone();
-    tokio::spawn(async {
-        broadcast_task(tx_clone, "first").await;
-    });
-    tokio::spawn(async {
-        broadcast_task(tx, "second").await;
-    });
+    broadcaster::setup_broadcaster(tx);
     
     let addr =  SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
     let listener = TcpListener::bind(addr).await.unwrap();
