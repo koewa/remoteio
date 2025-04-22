@@ -1,62 +1,102 @@
 #[macro_use] extern crate rocket;
-use rocket_ws::{WebSocket, Stream};
-use rocket::tokio::sync::broadcast;
-use rocket::State;
-use std::sync::Arc;
 
-#[derive(Debug, Clone)]
-pub enum Error {
-  DivisionByZero,
-  NonPositiveLogarithm,
-  NegativeSquareRoot,
+use rocket::serde::{Serialize, json::Json};
+use rocket::tokio::sync::broadcast::{channel, Sender};
+use rocket::tokio::{self};
+use tokio_tungstenite::tungstenite::protocol::Message;
+use tokio_tungstenite::accept_async;
+use tokio::net::TcpListener;
+use futures_util::{StreamExt, SinkExt};
+use rocket::response::Redirect;
+
+// Struct for the REST API response
+#[derive(Serialize)]
+struct ApiResponse {
+    message: String,
 }
 
-#[derive(Clone)]
-struct WebSocketBroadcaster {
-  sender: broadcast::Sender<String>,
-  message: Result<String, Error>
+// REST API endpoint
+#[get("/api")]
+fn api() -> Json<ApiResponse> {
+    Json(ApiResponse {
+        message: "Hello from Rocket REST API!".to_string(),
+    })
 }
 
-#[get("/hello/<name>/<age>")]
-fn helloage(name: &str, age: u8) -> String {
-  format!("Hello, {} year old named {}!\n", age, name)
+// WebSocket handler (placeholder route)
+#[get("/ws")]
+fn ws_handler() -> Redirect {
+    // Redirect to WebSocket server running on port 9001
+    Redirect::temporary("ws://127.0.0.1:9001/ws")
 }
 
-#[get("/hello/<name>")]
-fn hello(name: &str, broadcaster: &State<Arc<WebSocketBroadcaster>>) -> String {
-  let message = format!("Hello, {}!\n", name);
-  broadcaster.sender.send(message.clone()).ok();
-  //broadcaster.message = message.clone();
-  message
-}
+// WebSocket TCP server using Tokio Tungstenite
+async fn websocket_server(tx: Sender<String>) {
+    let addr = "127.0.0.1:9001";
+    let listener = TcpListener::bind(&addr).await.expect("Failed to bind address");
 
-#[post("/login", data = "<login>")]
-fn login(login: &str) -> String {
-  format!("Hello, {}!\n", login)
-}
+    println!("WebSocket server running on ws://{}", addr);
 
-#[get("/echo")]
-fn echo_stream(ws: WebSocket, broadcaster: &State<Arc<WebSocketBroadcaster>>) -> Stream!['static] {
-  Stream! { ws =>
-    for await message in ws {
-      yield rocket_ws::Message(String::from("init"));
-      //yield broadcaster.message?;
-      //yield message?;
-      //yield Result<String, MathError>(broadcaster.message)?
+    while let Ok((stream, _)) = listener.accept().await {
+        let peer = stream.peer_addr().expect("Failed to get peer address");
+        println!("Incoming TCP connection from: {}", peer);
+
+        tokio::spawn(handle_websocket(stream, tx.clone()));
     }
-  }
 }
 
-#[launch]
-fn rocket() -> _ {
-  let (sender, _) = broadcast::channel(100);
-  let initstring : String = String::from("init");
-  let broadcaster = Arc::new(WebSocketBroadcaster { sender, message: Ok(initstring.clone())});
-  rocket::build().mount("/", routes![
-    hello,
-    helloage,
-    login,
-    echo_stream]
-  )
-  .manage(broadcaster)
+async fn handle_websocket(
+    stream: tokio::net::TcpStream,
+    tx: Sender<String>
+) {
+    let ws_stream = accept_async(stream).await.expect("Error during WebSocket handshake");
+    let (mut ws_sender, mut ws_receiver) = ws_stream.split();
+
+    let mut rx = tx.subscribe();
+
+    loop {
+        tokio::select! {
+            // Handle incoming messages from the client
+            msg = ws_receiver.next() => {
+                match msg {
+                    Some(Ok(Message::Text(text))) => {
+                        println!("Received message from client: {}", text);
+                        // Echo the message back
+                        ws_sender.send(Message::Text("message received by server: ".to_owned() + &text)).await.expect("Failed to send message");
+                    }
+                    Some(Ok(Message::Ping(ping))) => {
+                        ws_sender.send(Message::Pong(ping)).await.expect("Failed to send pong");
+                    }
+                    Some(Ok(Message::Close(reason))) => {
+                        println!("Client disconnected: {:?}", reason);
+                        break;
+                    }
+                    _ => break,
+                }
+            },
+
+            // Broadcast messages to clients
+            msg = rx.recv() => {
+                if let Ok(notification) = msg {
+                    ws_sender.send(Message::Text(notification)).await.expect("Failed to send message");
+                }
+            }
+        }
+    }
+}
+
+#[rocket::launch]
+async fn rocket() -> _ {
+    // Create a broadcast channel for notifications
+    let (tx, _) = channel::<String>(10);
+
+    // Spawn a WebSocket server in the background
+    let tx_clone = tx.clone();
+    tokio::spawn(async move {
+        websocket_server(tx_clone).await;
+    });
+
+    // Rocket instance
+    rocket::build()
+        .mount("/", routes![api, ws_handler])
 }
