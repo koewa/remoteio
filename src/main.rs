@@ -19,7 +19,8 @@ mod service;
 // * handle errors (no unwrap/expect)
 // * return json messages instead of strings
 // * move code into modules
-// * forward messages received from ws to broadcaster
+// * forward messages received from ws to service
+// * clean shutdown (cancel tasks)
 
 #[derive(Debug)]
 enum ServerState {
@@ -104,14 +105,7 @@ async fn main() {
         tx: tx.clone(),
     }));
 
-    let service = service::setup_broadcaster(tx.clone());
-    //tokio::spawn(async move {
-    //  service.broadcast_task(tx, "bla").await;
-    //});
-    //tokio::spawn(async move {
-    //  service.broadcast_task(tx, "bla").await;
-    //});
-
+    service::setup_broadcaster(tx.clone());
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
     let listener = TcpListener::bind(addr).await.unwrap();
 
