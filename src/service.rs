@@ -2,14 +2,14 @@ use async_std::task;
 use std::time::Duration;
 use tokio::sync::broadcast::{Sender};
 
-//// Task that broadcasts a message every 10 seconds
+// Task that broadcasts a message every 10 seconds
 async fn broadcast_task(tx: Sender<String>, name: &str) {
     loop {
         task::sleep(Duration::from_secs(1)).await;
         let message = format!("Server broadcast: Hello from {} to all WebSocket clients!", name).to_string();
-        println!("Broadcasting message: {}, from {}", message, name);
+        println!("Broadcasting message: {}", message);
 
-        if let Err(_) = tx.send(message) {
+        if tx.send(message).is_err() {
             println!("No active WebSocket clients to send the message to ({}).", name);
         }
     }

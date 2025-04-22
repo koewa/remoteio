@@ -20,7 +20,8 @@ use tower_http::services::ServeFile;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast::{channel, Sender};
 use tokio::sync::Mutex;
-mod broadcaster;
+
+mod service;
 
 // todo
 // * handle errors (no unwrap/expect)
@@ -65,7 +66,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
                         println!("Received message: {}", msg);
                         {
                             let mut state_locked = state.lock().await;
-                            state_locked.nbr_of_calls = state_locked.nbr_of_calls + 1;
+                            state_locked.nbr_of_calls += 1;
                         }
                         if let Err(e) = socket.send(Message::Text(format!("Echo: {}", msg).into())).await {
                             eprintln!("Error sending message: {}", e);
@@ -97,7 +98,7 @@ async fn main() {
     let (tx, _) = channel::<String>(10);
     let state = Arc::new(Mutex::new(Status{nbr_of_calls: 0, state: ServerState::Disconnected, tx: tx.clone()}));
 
-    broadcaster::setup_broadcaster(tx);
+    service::setup_broadcaster(tx);
     
     let addr =  SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
     let listener = TcpListener::bind(addr).await.unwrap();
