@@ -3,11 +3,12 @@
 use rocket::serde::{Serialize, json::Json};
 use rocket::tokio::sync::broadcast::{channel, Sender};
 use rocket::tokio::{self, time::sleep};
+use rocket::response::Redirect;
+use rocket::fs::NamedFile;
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tokio_tungstenite::accept_async;
 use tokio::net::TcpListener;
 use futures_util::{StreamExt, SinkExt};
-use rocket::response::Redirect;
 use std::time::Duration;
 
 
@@ -17,12 +18,16 @@ struct ApiResponse {
     message: String,
 }
 
-// REST API endpoint
 #[get("/api")]
 fn api() -> Json<ApiResponse> {
     Json(ApiResponse {
         message: "Hello from Rocket REST API!".to_string(),
     })
+}
+
+#[get("/<path>")]
+async fn index(path: &str) -> NamedFile {
+    NamedFile::open("src/index").await.unwrap()
 }
 
 // WebSocket handler (placeholder route)
@@ -117,5 +122,5 @@ async fn rocket() -> _ {
 
     // Rocket instance
     rocket::build()
-        .mount("/", routes![api, ws_handler])
+        .mount("/", routes![api, index, ws_handler])
 }
