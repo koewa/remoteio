@@ -26,9 +26,9 @@ use tokio::sync::Mutex;
 // todo
 // * handle errors (no unwrap/expect)
 // * return json messages instead of strings
-// * configure connected/disconnected state of ws
 // * move code into modules
 
+#[derive(Debug)]
 enum ServerState {
     Connected,
     Disconnected,
@@ -64,6 +64,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
         return;
     }
 
+    state.lock().await.state = ServerState::Connected;
     let mut rx = state.lock().await.rx.subscribe();
     // Loop to keep the connection alive
     loop {
@@ -81,6 +82,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
                     }
                     Message::Close(_) => {
                         println!("Closing WebSocket connection.");
+                        state.lock().await.state = ServerState::Disconnected;
                         break;
                     }
                     _ => {}
@@ -96,7 +98,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
 
 async fn root_handler(State(state): State<Arc<Mutex<Status>>>) -> String {
     let count = state.lock().await.nbr_of_calls;
-    format!("Hello, world! {}", count)
+    format!("Number of calls: {} \n state: {:?}", count, state.lock().await.state)
 }
 
 #[tokio::main]
