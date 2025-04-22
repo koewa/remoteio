@@ -8,6 +8,7 @@ use rocket::State;
 
 // todo
 // * handle errors (no unwrap/expect)
+// * make single threaded
 
 // Struct for the REST API response
 #[derive(Serialize)]
@@ -65,6 +66,7 @@ async fn broadcast_task(tx: Sender<String>) {
 }
 
 #[rocket::launch]
+//#[tokio::main(flavor = "current_thread")]
 async fn rocket() -> _ {
     let (tx, _) = channel::<String>(10);
 
@@ -72,8 +74,10 @@ async fn rocket() -> _ {
     tokio::spawn(async move {
         broadcast_task(tx_clone).await;
     });
+    let figment = rocket::Config::figment();
+        //.merge(("workers", 1));
 
-    rocket::build()
+    rocket::custom(figment)
         .manage(tx)
         .mount("/", routes![api, index, ws_handler])
 }
