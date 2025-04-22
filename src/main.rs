@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tower_http::services::ServeFile;
 use tokio::net::TcpListener;
-use tokio::sync::broadcast::{channel, Sender};
+use tokio::sync::broadcast::{channel, Sender, Receiver};
 use tokio::sync::Mutex;
 
 // todo
@@ -37,7 +37,7 @@ enum ServerState {
 struct Status {
     state: ServerState,
     nbr_of_calls: u32,
-    rx: Sender<String>,
+    rx: Receiver<String>,
 }
 
 //// Task that broadcasts a message every 10 seconds
@@ -65,7 +65,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
     }
 
     state.lock().await.state = ServerState::Connected;
-    let mut rx = state.lock().await.rx.subscribe();
+    let rx = & mut state.lock().await.rx;
     // Loop to keep the connection alive
     loop {
         tokio::select! {
@@ -73,9 +73,10 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
                 match msg {
                     Message::Text(msg) => {
                         println!("Received message: {}", msg);
-                        let mut count = state.lock().await.nbr_of_calls;
-                        count = count + 1;
-                        state.lock().await.nbr_of_calls = count;
+                        {
+                            let mut state_locked = state.lock().await;
+                            state_locked.nbr_of_calls = state_locked.nbr_of_calls + 1;
+                        }
                         if let Err(e) = socket.send(Message::Text(format!("Echo: {}", msg).into())).await {
                             eprintln!("Error sending message: {}", e);
                         }
@@ -103,12 +104,11 @@ async fn root_handler(State(state): State<Arc<Mutex<Status>>>) -> String {
 
 #[tokio::main]
 async fn main() {
-    let (tx, _) = channel::<String>(10);
-    let tx_clone = tx.clone();
-    let state = Arc::new(Mutex::new(Status{nbr_of_calls: 0, state: ServerState::Disconnected, rx: tx}));
+    let (tx, rx) = channel::<String>(10);
+    let state = Arc::new(Mutex::new(Status{nbr_of_calls: 0, state: ServerState::Disconnected, rx: rx}));
 
     tokio::spawn(async move {
-        broadcast_task(tx_clone).await;
+        broadcast_task(tx).await;
     });
     
     let addr =  SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
