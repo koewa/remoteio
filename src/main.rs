@@ -26,21 +26,24 @@ async fn index() -> NamedFile {
 
 #[get("/ws")]
 fn ws_handler(ws: ws::WebSocket, state: & State<Sender<String>>) -> ws::Channel<'static> {
+    println!("Web socket is opened");
     use rocket::futures::{SinkExt, StreamExt};
     let mut rx = state.subscribe();
     ws.channel(move |mut stream| Box::pin(async move {
-        tokio::spawn(async move {
-            while let Ok(msg) = rx.recv().await {
-                println!("Sending to client: {}", msg);
-                //stream.send(ws::Message::Text(msg)).await.expect("Failed to send message");
-            }
-        });
-        while let Some(message) = stream.next().await {
-            println!("Received from client: {}", message.as_ref().expect("bla"));
-            let _ = stream.send(message?).await;
-        }
+        loop {
+            tokio::select! {
+                Some(message) = stream.next() => {
+                    let message_done = message.expect("something wrong with message");
+                    println!("Received from client: {}", message_done);
+                    let _ = stream.send(message_done).await;
+                }
 
-        Ok(())
+                Ok(msg) = rx.recv() => {
+                    println!("Sending to client: {}", msg);
+                    stream.send(ws::Message::Text(msg)).await.expect("Failed to send message");
+                }
+            }
+        }
     }))
 }
 
