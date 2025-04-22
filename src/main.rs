@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tower_http::services::ServeFile;
 use tokio::net::TcpListener;
-use tokio::sync::broadcast::{channel, Sender, Receiver};
+use tokio::sync::broadcast::{channel, Sender};
 use tokio::sync::Mutex;
 
 // todo
@@ -37,18 +37,18 @@ enum ServerState {
 struct Status {
     state: ServerState,
     nbr_of_calls: u32,
-    rx: Receiver<String>,
+    tx: Sender<String>,
 }
 
 //// Task that broadcasts a message every 10 seconds
-async fn broadcast_task(tx: Sender<String>) {
+async fn broadcast_task(tx: Sender<String>, name: &str) {
     loop {
         task::sleep(Duration::from_secs(1)).await;
-        let message = "Server broadcast: Hello to all WebSocket clients!".to_string();
-        println!("Broadcasting message: {}", message);
+        let message = format!("Server broadcast: Hello from {} to all WebSocket clients!", name).to_string();
+        println!("Broadcasting message: {}, from {}", message, name);
 
         if let Err(_) = tx.send(message) {
-            println!("No active WebSocket clients to send the message to.");
+            println!("No active WebSocket clients to send the message to ({}).", name);
         }
     }
 }
@@ -65,9 +65,12 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
     }
 
     state.lock().await.state = ServerState::Connected;
-    let rx = & mut state.lock().await.rx;
+    // tx.subscribe gives a Reveiver
+    let rx = & mut state.lock().await.tx.subscribe();
     // Loop to keep the connection alive
     loop {
+        // trigger when something is received from the ws or when something needs to be send to the
+        // ws from an internal service (using the channel)
         tokio::select! {
             Some(Ok(msg)) = socket.recv() => {
                 match msg {
@@ -104,11 +107,15 @@ async fn root_handler(State(state): State<Arc<Mutex<Status>>>) -> String {
 
 #[tokio::main]
 async fn main() {
-    let (tx, rx) = channel::<String>(10);
-    let state = Arc::new(Mutex::new(Status{nbr_of_calls: 0, state: ServerState::Disconnected, rx: rx}));
+    let (tx, _) = channel::<String>(10);
+    let state = Arc::new(Mutex::new(Status{nbr_of_calls: 0, state: ServerState::Disconnected, tx: tx.clone()}));
 
-    tokio::spawn(async move {
-        broadcast_task(tx).await;
+    let tx_clone = tx.clone();
+    tokio::spawn(async {
+        broadcast_task(tx_clone, "first").await;
+    });
+    tokio::spawn(async {
+        broadcast_task(tx, "second").await;
     });
     
     let addr =  SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
