@@ -16,11 +16,12 @@ use axum::{
 
 };
 use std::net::{IpAddr,Ipv4Addr,SocketAddr};
+use std::sync::Arc;
 use std::time::Duration;
 use tower_http::services::ServeFile;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast::{channel, Sender};
-
+use tokio::sync::Mutex;
 
 // todo
 // * handle errors (no unwrap/expect)
@@ -75,11 +76,6 @@ struct Status {
 //    }))
 //}
 
-#[derive(Clone)]
-struct AppState {
-    tx: Sender<String>,
-}
-
 //// Task that broadcasts a message every 10 seconds
 async fn broadcast_task(tx: Sender<String>) {
     loop {
@@ -93,18 +89,18 @@ async fn broadcast_task(tx: Sender<String>) {
     }
 }
 
-async fn websocket_handler( State(state): State<AppState>, ws: WebSocketUpgrade,) -> impl IntoResponse {
+async fn websocket_handler( State(state): State<Sender<String>>, ws: WebSocketUpgrade,) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
-async fn handle_socket(mut socket: WebSocket, state: AppState) {
+async fn handle_socket(mut socket: WebSocket, channel: Sender<String>) {
     // Send a greeting message to the client
     if let Err(e) = socket.send(Message::Text("Hello from the server!".into())).await {
         eprintln!("Error sending message: {}", e);
         return;
     }
 
-    let mut rx = state.tx.subscribe();
+    let mut rx = channel.subscribe();
     // Loop to keep the connection alive
     loop {
         tokio::select! {
@@ -137,15 +133,13 @@ async fn root_handler() -> &'static str {
 
 #[tokio::main]
 async fn main() {
-    // let state = Status{nbr_of_calls: 0, state: ServerState::Disconnected};
+    let state = Arc::new(Mutex::new(Status{nbr_of_calls: 0, state: ServerState::Disconnected}));
     let (tx, _) = channel::<String>(10);
 
     let tx_clone = tx.clone();
     tokio::spawn(async move {
         broadcast_task(tx_clone).await;
     });
-    
-    let state = AppState{tx};
     
     let addr =  SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
     let listener = TcpListener::bind(addr).await.unwrap();
@@ -155,8 +149,9 @@ async fn main() {
     let router = Router::new()
         .route("/", get_service(ServeFile::new("src/index.html")))
         .route("/api", get(root_handler))
+        .with_state(state)
         .route("/ws", get(websocket_handler))
-        .with_state(state);
+        .with_state(tx);
 
     axum::serve(listener, router.into_make_service())
         .await
