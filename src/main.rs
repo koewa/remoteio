@@ -2,12 +2,14 @@
 
 use rocket::serde::{Serialize, json::Json};
 use rocket::tokio::sync::broadcast::{channel, Sender};
-use rocket::tokio::{self};
+use rocket::tokio::{self, time::sleep};
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tokio_tungstenite::accept_async;
 use tokio::net::TcpListener;
 use futures_util::{StreamExt, SinkExt};
 use rocket::response::Redirect;
+use std::time::Duration;
+
 
 // Struct for the REST API response
 #[derive(Serialize)]
@@ -45,10 +47,7 @@ async fn websocket_server(tx: Sender<String>) {
     }
 }
 
-async fn handle_websocket(
-    stream: tokio::net::TcpStream,
-    tx: Sender<String>
-) {
+async fn handle_websocket( stream: tokio::net::TcpStream, tx: Sender<String>) {
     let ws_stream = accept_async(stream).await.expect("Error during WebSocket handshake");
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
 
@@ -85,6 +84,20 @@ async fn handle_websocket(
     }
 }
 
+// Task that broadcasts a message every 10 seconds
+async fn broadcast_task(tx: Sender<String>) {
+    loop {
+        sleep(Duration::from_secs(10)).await;
+        let message = "Server broadcast: Hello to all WebSocket clients!".to_string();
+        println!("Broadcasting message: {}", message);
+
+        // Send the message to all WebSocket clients
+        if let Err(_) = tx.send(message) {
+            println!("No active WebSocket clients to send the message to.");
+        }
+    }
+}
+
 #[rocket::launch]
 async fn rocket() -> _ {
     // Create a broadcast channel for notifications
@@ -94,6 +107,12 @@ async fn rocket() -> _ {
     let tx_clone = tx.clone();
     tokio::spawn(async move {
         websocket_server(tx_clone).await;
+    });
+
+    // Spawn the periodic broadcast task
+    let tx_clone = tx.clone();
+    tokio::spawn(async move {
+        broadcast_task(tx_clone).await;
     });
 
     // Rocket instance
