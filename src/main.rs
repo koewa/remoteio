@@ -1,3 +1,4 @@
+use async_std::task;
 use axum::{
     response::IntoResponse,
     routing::{
@@ -14,13 +15,12 @@ use axum::{
     },
 
 };
+use std::net::{IpAddr,Ipv4Addr,SocketAddr};
+use std::time::Duration;
 use tower_http::services::ServeFile;
 use tokio::net::TcpListener;
-use std::{net::IpAddr,net::Ipv4Addr, net::SocketAddr};
-use std::time::Duration;
-use async_std::task;
-
 use tokio::sync::broadcast::{channel, Sender};
+
 
 // todo
 // * handle errors (no unwrap/expect)
@@ -31,16 +31,16 @@ use tokio::sync::broadcast::{channel, Sender};
 //    message: String,
 //}
 //
-//enum ServerState {
-//    Connected,
-//    Disconnected,
-//}
-//
-//struct Status {
-//    state: ServerState,
-//    nbr_of_calls: u32
-//}
-//
+enum ServerState {
+    Connected,
+    Disconnected,
+}
+
+struct Status {
+    state: ServerState,
+    nbr_of_calls: u32
+}
+
 //#[get("/api")]
 //fn api(state: & State<Status>) -> Json<ApiResponse> {
 //    //state.nbr_of_calls = state.nbr_of_calls +1;
@@ -74,8 +74,6 @@ use tokio::sync::broadcast::{channel, Sender};
 //        }
 //    }))
 //}
-//
-//
 
 #[derive(Clone)]
 struct AppState {
@@ -96,7 +94,7 @@ async fn broadcast_task(tx: Sender<String>) {
 }
 
 async fn websocket_handler( State(state): State<AppState>, ws: WebSocketUpgrade,) -> impl IntoResponse {
-        ws.on_upgrade(move |socket| handle_socket(socket, state))
+    ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
 async fn handle_socket(mut socket: WebSocket, state: AppState) {
@@ -106,20 +104,29 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
         return;
     }
 
+    let mut rx = state.tx.subscribe();
     // Loop to keep the connection alive
-    while let Some(Ok(msg)) = socket.recv().await {
-        match msg {
-            Message::Text(msg) => {
-                println!("Received message: {}", msg);
-                if let Err(e) = socket.send(Message::Text(format!("Echo: {}", msg).into())).await {
-                    eprintln!("Error sending message: {}", e);
+    loop {
+        tokio::select! {
+            Some(Ok(msg)) = socket.recv() => {
+                match msg {
+                    Message::Text(msg) => {
+                        println!("Received message: {}", msg);
+                        if let Err(e) = socket.send(Message::Text(format!("Echo: {}", msg).into())).await {
+                            eprintln!("Error sending message: {}", e);
+                        }
+                    }
+                    Message::Close(_) => {
+                        println!("Closing WebSocket connection.");
+                        break;
+                    }
+                    _ => {}
                 }
             }
-            Message::Close(_) => {
-                println!("Closing WebSocket connection.");
-                break;
+            Ok(msg) = rx.recv() => {
+                println!("Sending to client: {}", msg);
+                socket.send(Message::Text(msg.into())).await.expect("Failed to send message");
             }
-            _ => {}
         }
     }
 }
@@ -137,12 +144,6 @@ async fn main() {
     tokio::spawn(async move {
         broadcast_task(tx_clone).await;
     });
-    // let figment = rocket::Config::figment();
-
-    // rocket::custom(figment)
-    //     .manage(tx)
-    //     .manage(state)
-    //     .mount("/", routes![api, index, root, ws_handler])
     
     let state = AppState{tx};
     
