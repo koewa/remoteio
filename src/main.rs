@@ -16,10 +16,21 @@ struct ApiResponse {
     message: String,
 }
 
+enum ServerState {
+    Connected,
+    Disconnected,
+}
+
+struct Status {
+    state: ServerState,
+    nbr_of_calls: u32
+}
+
 #[get("/api")]
-fn api() -> Json<ApiResponse> {
+fn api(state: & State<Status>) -> Json<ApiResponse> {
+    //state.nbr_of_calls = state.nbr_of_calls +1;
     Json(ApiResponse {
-        message: "Hello from Rocket REST API!".to_string(),
+        message: format!("Hello from Rocket REST API! - {}", state.nbr_of_calls).to_string(),
     })
 }
 
@@ -29,17 +40,18 @@ async fn index() -> NamedFile {
 }
 
 #[get("/ws")]
-fn ws_handler(ws: ws::WebSocket, state: & State<Sender<String>>) -> ws::Channel<'static> {
+fn ws_handler(ws: ws::WebSocket, state: & State<Status>, sender: & State<Sender<String>>) -> ws::Channel<'static> {
     println!("Web socket is opened");
     use rocket::futures::{SinkExt, StreamExt};
-    let mut rx = state.subscribe();
+    let mut rx = sender.subscribe();
+    let nbr_of_calls = state.nbr_of_calls;
     ws.channel(move |mut stream| Box::pin(async move {
         loop {
             tokio::select! {
                 Some(message) = stream.next() => {
                     let message_done = message.expect("something wrong with message");
                     println!("Received from client: {}", message_done);
-                    let result = format!("server received: {message_done}");
+                    let result = format!("server received: {message_done} {nbr_of_calls}");
                     let _ = stream.send(ws::Message::Text(result)).await;
                 }
 
@@ -68,6 +80,7 @@ async fn broadcast_task(tx: Sender<String>) {
 #[rocket::launch]
 //#[tokio::main(flavor = "current_thread")]
 async fn rocket() -> _ {
+    let state = Status{nbr_of_calls: 0, state: ServerState::Disconnected};
     let (tx, _) = channel::<String>(10);
 
     let tx_clone = tx.clone();
@@ -79,5 +92,6 @@ async fn rocket() -> _ {
 
     rocket::custom(figment)
         .manage(tx)
+        .manage(state)
         .mount("/", routes![api, index, ws_handler])
 }
