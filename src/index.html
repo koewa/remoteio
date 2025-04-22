@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>WebSocket Test</title>
+    </head>
+    <body>
+        <h1>WebSocket Test</h1>
+        <script type="text/javascript">
+            let socket = new WebSocket("ws://" + window.location.host + "/ws");
+
+            socket.onmessage = function(event) {
+                console.log("Message from server: ", event.data);
+            };
+
+            socket.onopen = function() {
+                console.log("WebSocket connection opened");
+                socket.send("Hello from the browser!");
+            };
+
+            socket.onclose = function() {
+                console.log("WebSocket connection closed");
+            };
+        </script>
+    </body>
+</html>
