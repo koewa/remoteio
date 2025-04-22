@@ -3,6 +3,10 @@ use tower_http::services::ServeFile;
 use tokio::net::TcpListener;
 use std::{net::IpAddr,net::Ipv4Addr, net::SocketAddr};
 use axum::routing::get_service;
+use std::time::Duration;
+use async_std::task;
+
+use tokio::sync::broadcast::{channel, Sender};
 
 use axum::extract::ws::Message;
 use axum::extract::ws::WebSocket;
@@ -62,17 +66,17 @@ use axum::extract::ws::WebSocketUpgrade;
 //}
 //
 //// Task that broadcasts a message every 10 seconds
-//async fn broadcast_task(tx: Sender<String>) {
-//    loop {
-//        sleep(Duration::from_secs(10)).await;
-//        let message = "Server broadcast: Hello to all WebSocket clients!".to_string();
-//        println!("Broadcasting message: {}", message);
-//
-//        if let Err(_) = tx.send(message) {
-//            println!("No active WebSocket clients to send the message to.");
-//        }
-//    }
-//}
+async fn broadcast_task(tx: Sender<String>) {
+    loop {
+        task::sleep(Duration::from_secs(1)).await;
+        let message = "Server broadcast: Hello to all WebSocket clients!".to_string();
+        println!("Broadcasting message: {}", message);
+
+        if let Err(_) = tx.send(message) {
+            println!("No active WebSocket clients to send the message to.");
+        }
+    }
+}
 
 async fn websocket_handler(ws: WebSocketUpgrade) -> impl axum::response::IntoResponse {
         ws.on_upgrade(handle_socket)
@@ -110,12 +114,12 @@ async fn root_handler() -> &'static str {
 #[tokio::main]
 async fn main() {
     // let state = Status{nbr_of_calls: 0, state: ServerState::Disconnected};
-    // let (tx, _) = channel::<String>(10);
+    let (tx, _) = channel::<String>(10);
 
-    // let tx_clone = tx.clone();
-    // tokio::spawn(async move {
-    //     broadcast_task(tx_clone).await;
-    // });
+    let tx_clone = tx.clone();
+    tokio::spawn(async move {
+        broadcast_task(tx_clone).await;
+    });
     // let figment = rocket::Config::figment();
 
     // rocket::custom(figment)
