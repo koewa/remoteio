@@ -25,13 +25,9 @@ use tokio::sync::Mutex;
 
 // todo
 // * handle errors (no unwrap/expect)
+// * return json messages instead of strings
+// * configure connected/disconnected state of ws
 
-//// Struct for the REST API response
-//#[derive(Serialize)]
-//struct ApiResponse {
-//    message: String,
-//}
-//
 enum ServerState {
     Connected,
     Disconnected,
@@ -42,40 +38,6 @@ struct Status {
     nbr_of_calls: u32,
     rx: Sender<String>,
 }
-
-//#[get("/api")]
-//fn api(state: & State<Status>) -> Json<ApiResponse> {
-//    //state.nbr_of_calls = state.nbr_of_calls +1;
-//    Json(ApiResponse {
-//        message: format!("Hello from Rocket REST API! - {}", state.nbr_of_calls).to_string(),
-//    })
-//}
-//
-//#[get("/ws")]
-//fn ws_handler(ws: ws::WebSocket, state: & State<Status>, sender: & State<Sender<String>>) -> ws::Channel<'static> {
-//    println!("Web socket is opened");
-//    state.state = ServerState::Connected;
-//    use rocket::futures::{SinkExt, StreamExt};
-//    let mut rx = sender.subscribe();
-//    let nbr_of_calls = state.nbr_of_calls;
-//    ws.channel(move |mut stream| Box::pin(async move {
-//        loop {
-//            tokio::select! {
-//                Some(message) = stream.next() => {
-//                    let message_done = message.expect("something wrong with message");
-//                    println!("Received from client: {}", message_done);
-//                    let result = format!("server received: {message_done} {nbr_of_calls}");
-//                    let _ = stream.send(ws::Message::Text(result)).await;
-//                }
-//
-//                Ok(msg) = rx.recv() => {
-//                    println!("Sending to client: {}", msg);
-//                    stream.send(ws::Message::Text(msg)).await.expect("Failed to send message");
-//                }
-//            }
-//        }
-//    }))
-//}
 
 //// Task that broadcasts a message every 10 seconds
 async fn broadcast_task(tx: Sender<String>) {
