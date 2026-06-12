@@ -6,12 +6,13 @@ use axum::{
     response::IntoResponse,
     routing::{get, get_service, Router},
 };
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast::{channel, Sender};
 use tokio::sync::Mutex;
 use tower_http::services::ServeFile;
+use clap::Parser;
 
 mod service;
 
@@ -42,7 +43,6 @@ async fn websocket_handler(
 }
 
 async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
-    // Send a greeting message to the client
     if let Err(e) = socket
         .send(Message::Text("Hello from the server!".into()))
         .await
@@ -52,12 +52,9 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
     }
 
     state.lock().await.state = ServerState::Connected;
-    // tx.subscribe gives a Reveiver
-    let rx = &mut state.lock().await.tx.subscribe();
-    // Loop to keep the connection alive
+    let mut rx = state.lock().await.tx.subscribe();
+
     loop {
-        // trigger when something is received from the ws or when something needs to be send to the
-        // ws from an internal service (using the channel)
         tokio::select! {
             Some(Ok(msg)) = socket.recv() => {
                 match msg {
@@ -96,23 +93,39 @@ async fn root_handler(State(state): State<Arc<Mutex<Status>>>) -> String {
     )
 }
 
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// ip address to bind to
+    #[arg(short, long, default_value = "127.0.0.1")]
+    ip: String,
+
+    /// Port to listen to
+    #[arg(short, long, default_value_t = 8080)]
+    port: u16,
+}
+
 #[tokio::main]
 async fn main() {
-    let (tx, _) = channel::<String>(10);
+    let args = Args::parse();
+
+    let (tx, _) = channel::<String>(64);
     let state = Arc::new(Mutex::new(Status {
         nbr_of_calls: 0,
         state: ServerState::Disconnected,
         tx: tx.clone(),
     }));
 
-    service::setup_broadcaster(tx.clone());
-    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
+    service::setup_process_monitor(tx.clone());
+
+    let ip: IpAddr = args.ip.parse().expect("Invalid IP address");
+    let addr = SocketAddr::new(ip, args.port);
     let listener = TcpListener::bind(addr).await.unwrap();
 
     println!("started server on http://{}", addr);
 
     let router = Router::new()
-        .route("/", get_service(ServeFile::new("src/index.html")))
+        .route("/", get_service(ServeFile::new("src/ui/index.html")))
         .route("/api", get(root_handler))
         .route("/ws", get(websocket_handler))
         .with_state(state);
