@@ -54,6 +54,14 @@
             .cmdline { max-width: 120px; }
             th, td { padding: 4px 6px; }
         }
+        .shutdown-btn {
+            margin-left: auto; padding: 4px 14px; font-size: 0.8rem;
+            background: #da3633; color: #fff; border: none; border-radius: 6px;
+            cursor: pointer; font-weight: 600;
+        }
+        .shutdown-btn:hover { background: #f85149; }
+        .shutdown-btn:disabled { background: #484f58; cursor: default; }
+        .shutdown-btn-warn { background: #484f58; }
     </style>
 </head>
 <body>
@@ -61,6 +69,7 @@
     <div class="meta">
         <span id="count">processes: --</span>
         <span id="status">status: connecting</span>
+        <button class="shutdown-btn" id="shutdownBtn">Shutdown Server</button>
     </div>
     <div class="search">
         <input type="text" id="filter" placeholder="Filter by name, pid, or user...">
@@ -178,9 +187,23 @@
             connectingEl.style.display = "none";
         };
 
+        document.getElementById("shutdownBtn").addEventListener("click", function() {
+            if (confirm("Are you sure you want to shut down the server?")) {
+                socket.send("shutdown");
+                this.disabled = true;
+                this.textContent = "Shutting down...";
+            }
+        });
+
         socket.onmessage = (event) => {
+            const msg = event.data;
+            if (msg === "Server shutting down...") {
+                document.getElementById("shutdownBtn").disabled = true;
+                document.getElementById("shutdownBtn").textContent = "Server offline";
+                return;
+            }
             try {
-                const data = JSON.parse(event.data);
+                const data = JSON.parse(msg);
                 if (Array.isArray(data)) {
                     processes = data;
                     render();
@@ -192,6 +215,9 @@
             statusEl.textContent = "status: disconnected";
             connectingEl.textContent = "Connection lost. Reconnecting...";
             connectingEl.style.display = "block";
+            const btn = document.getElementById("shutdownBtn");
+            btn.disabled = true;
+            btn.textContent = "Server offline";
         };
 
         socket.onerror = () => {

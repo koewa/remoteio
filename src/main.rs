@@ -8,9 +8,11 @@ use axum::{
 };
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast::{channel, Sender};
 use tokio::sync::Mutex;
+use tokio::sync::Notify;
 use tower_http::services::ServeFile;
 use clap::Parser;
 
@@ -33,6 +35,7 @@ struct Status {
     state: ServerState,
     nbr_of_calls: u32,
     tx: Sender<String>,
+    shutdown: Arc<Notify>,
 }
 
 async fn websocket_handler(
@@ -60,6 +63,13 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
                 match msg {
                     Message::Text(msg) => {
                         println!("Received message: {}", msg);
+                        if msg == "shutdown" {
+                            let _ = socket.send(Message::Text("Server shutting down...".into())).await;
+                            let _ = state.lock().await.tx.send("Server shutting down...".to_string());
+                            state.lock().await.shutdown.notify_one();
+                            tokio::time::sleep(Duration::from_millis(500)).await;
+                            break;
+                        }
                         {
                             let mut state_locked = state.lock().await;
                             state_locked.nbr_of_calls += 1;
@@ -110,10 +120,12 @@ async fn main() {
     let args = Args::parse();
 
     let (tx, _) = channel::<String>(64);
+    let shutdown = Arc::new(Notify::new());
     let state = Arc::new(Mutex::new(Status {
         nbr_of_calls: 0,
         state: ServerState::Disconnected,
         tx: tx.clone(),
+        shutdown: shutdown.clone(),
     }));
 
     service::setup_process_monitor(tx.clone());
@@ -131,6 +143,10 @@ async fn main() {
         .with_state(state);
 
     axum::serve(listener, router.into_make_service())
+        .with_graceful_shutdown(async move {
+            shutdown.notified().await;
+            println!("Shutting down gracefully...");
+        })
         .await
         .unwrap();
 }
