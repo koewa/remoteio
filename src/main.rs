@@ -63,15 +63,15 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
                 match msg {
                     Message::Text(msg) => {
                         println!("Received message: {}", msg);
-                        if msg == "shutdown" {
-                            let _ = socket.send(Message::Text("Server shutting down...".into())).await;
-                            let _ = state.lock().await.tx.send("Server shutting down...".to_string());
-                            state.lock().await.shutdown.notify_one();
-                            tokio::time::sleep(Duration::from_millis(500)).await;
-                            break;
-                        }
                         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&msg) {
                             match json["type"].as_str() {
+                                Some("shutdown") => {
+                                    let _ = socket.send(Message::Text("Server shutting down...".into())).await;
+                                    let _ = state.lock().await.tx.send("Server shutting down...".to_string());
+                                    state.lock().await.shutdown.notify_one();
+                                    tokio::time::sleep(Duration::from_millis(500)).await;
+                                    break;
+                                }
                                 Some("todo_add") => {
                                     if let Some(text) = json["text"].as_str() {
                                         let mut s = state.lock().await;
@@ -112,7 +112,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
                 }
             }
             Ok(msg) = rx.recv() => {
-                println!("Sending to client: {}", msg);
+                //println!("Sending to client: {}", msg);
                 if socket.send(Message::Text(msg.into())).await.is_err() {
                     break;
                 }

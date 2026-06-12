@@ -284,7 +284,7 @@
         // ---- websocket ----
         shutdownBtn.addEventListener("click", function() {
             if (confirm("Are you sure you want to shut down the server?")) {
-                socket.send("shutdown");
+                socket.send(JSON.stringify({type: "shutdown"}));
                 this.disabled = true;
                 this.textContent = "Shutting down...";
             }
