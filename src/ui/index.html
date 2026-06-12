@@ -69,7 +69,7 @@
     <div class="meta">
         <span id="count">processes: --</span>
         <span id="status">status: connecting</span>
-        <button class="shutdown-btn" id="shutdownBtn">Shutdown Server</button>
+        <button class="shutdown-btn" id="shutdownBtn" disabled>Shutdown Server</button>
     </div>
     <div class="search">
         <input type="text" id="filter" placeholder="Filter by name, pid, or user...">
@@ -93,13 +93,14 @@
     <div id="connecting" class="connecting">Connecting to server...</div>
 
     <script>
-        const socket = new WebSocket("ws://" + window.location.host + "/ws");
         const tbody = document.getElementById("tbody");
         const countEl = document.getElementById("count");
         const statusEl = document.getElementById("status");
         const connectingEl = document.getElementById("connecting");
         const filterInput = document.getElementById("filter");
+        const shutdownBtn = document.getElementById("shutdownBtn");
 
+        let socket;
         let processes = [];
         let sortCol = "pid";
         let sortDir = 1;
@@ -182,12 +183,7 @@
 
         filterInput.addEventListener("input", render);
 
-        socket.onopen = () => {
-            statusEl.textContent = "status: connected";
-            connectingEl.style.display = "none";
-        };
-
-        document.getElementById("shutdownBtn").addEventListener("click", function() {
+        shutdownBtn.addEventListener("click", function() {
             if (confirm("Are you sure you want to shut down the server?")) {
                 socket.send("shutdown");
                 this.disabled = true;
@@ -195,34 +191,49 @@
             }
         });
 
-        socket.onmessage = (event) => {
-            const msg = event.data;
-            if (msg === "Server shutting down...") {
-                document.getElementById("shutdownBtn").disabled = true;
-                document.getElementById("shutdownBtn").textContent = "Server offline";
-                return;
-            }
-            try {
-                const data = JSON.parse(msg);
-                if (Array.isArray(data)) {
-                    processes = data;
-                    render();
+        function connect() {
+            socket = new WebSocket("ws://" + window.location.host + "/ws");
+
+            socket.onopen = () => {
+                statusEl.textContent = "status: connected";
+                connectingEl.style.display = "none";
+                shutdownBtn.disabled = false;
+                shutdownBtn.textContent = "Shutdown Server";
+            };
+
+            socket.onmessage = (event) => {
+                const msg = event.data;
+                if (msg === "Server shutting down...") {
+                    shutdownBtn.disabled = true;
+                    shutdownBtn.textContent = "Server offline";
+                    return;
                 }
-            } catch (_) {}
-        };
+                try {
+                    const data = JSON.parse(msg);
+                    if (Array.isArray(data)) {
+                        processes = data;
+                        render();
+                    }
+                } catch (_) {}
+            };
 
-        socket.onclose = () => {
-            statusEl.textContent = "status: disconnected";
-            connectingEl.textContent = "Connection lost. Reconnecting...";
-            connectingEl.style.display = "block";
-            const btn = document.getElementById("shutdownBtn");
-            btn.disabled = true;
-            btn.textContent = "Server offline";
-        };
+            socket.onclose = () => {
+                statusEl.textContent = "status: disconnected";
+                connectingEl.textContent = "Reconnecting in 3 seconds...";
+                connectingEl.style.display = "block";
+                shutdownBtn.disabled = true;
+                shutdownBtn.textContent = "Server offline";
+                processes = [];
+                render();
+                setTimeout(connect, 3000);
+            };
 
-        socket.onerror = () => {
-            statusEl.textContent = "status: error";
-        };
+            socket.onerror = () => {
+                statusEl.textContent = "status: error";
+            };
+        }
+
+        connect();
     </script>
 </body>
 </html>
