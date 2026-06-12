@@ -18,13 +18,6 @@ use clap::Parser;
 
 mod service;
 
-// todo
-// * handle errors (no unwrap/expect)
-// * return json messages instead of strings
-// * move code into modules
-// * forward messages received from ws to service
-// * clean shutdown (cancel tasks)
-
 #[derive(Debug)]
 enum ServerState {
     Connected,
@@ -36,6 +29,7 @@ struct Status {
     nbr_of_calls: u32,
     tx: Sender<String>,
     shutdown: Arc<Notify>,
+    todos: Vec<String>,
 }
 
 async fn websocket_handler(
@@ -57,6 +51,12 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
     state.lock().await.state = ServerState::Connected;
     let mut rx = state.lock().await.tx.subscribe();
 
+    {
+        let s = state.lock().await;
+        let list = serde_json::json!({"type":"todo_list","items": s.todos}).to_string();
+        let _ = socket.send(Message::Text(list.into())).await;
+    }
+
     loop {
         tokio::select! {
             Some(Ok(msg)) = socket.recv() => {
@@ -70,12 +70,37 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
                             tokio::time::sleep(Duration::from_millis(500)).await;
                             break;
                         }
-                        {
-                            let mut state_locked = state.lock().await;
-                            state_locked.nbr_of_calls += 1;
-                        }
-                        if let Err(e) = socket.send(Message::Text(format!("Echo: {}", msg).into())).await {
-                            eprintln!("Error sending message: {}", e);
+                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&msg) {
+                            match json["type"].as_str() {
+                                Some("todo_add") => {
+                                    if let Some(text) = json["text"].as_str() {
+                                        let mut s = state.lock().await;
+                                        s.todos.push(text.to_string());
+                                        let list = serde_json::json!({"type":"todo_list","items": s.todos}).to_string();
+                                        let _ = s.tx.send(list);
+                                    }
+                                }
+                                Some("todo_remove") => {
+                                    if let Some(id) = json["id"].as_u64() {
+                                        let mut s = state.lock().await;
+                                        let id = id as usize;
+                                        if id < s.todos.len() {
+                                            s.todos.remove(id);
+                                            let list = serde_json::json!({"type":"todo_list","items": s.todos}).to_string();
+                                            let _ = s.tx.send(list);
+                                        }
+                                    }
+                                }
+                                _ => {}
+                            }
+                        } else {
+                            {
+                                let mut state_locked = state.lock().await;
+                                state_locked.nbr_of_calls += 1;
+                            }
+                            if socket.send(Message::Text(format!("Echo: {}", msg).into())).await.is_err() {
+                                break;
+                            }
                         }
                     }
                     Message::Close(_) => {
@@ -88,29 +113,30 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
             }
             Ok(msg) = rx.recv() => {
                 println!("Sending to client: {}", msg);
-                socket.send(Message::Text(msg.into())).await.expect("Failed to send message");
+                if socket.send(Message::Text(msg.into())).await.is_err() {
+                    break;
+                }
             }
         }
     }
 }
 
 async fn root_handler(State(state): State<Arc<Mutex<Status>>>) -> String {
-    let count = state.lock().await.nbr_of_calls;
+    let state_locked = state.lock().await;
     format!(
-        "Number of calls: {} \n state: {:?}",
-        count,
-        state.lock().await.state
+        "Number of calls: {} \n state: {:?} \n todos: {}",
+        state_locked.nbr_of_calls,
+        state_locked.state,
+        state_locked.todos.len(),
     )
 }
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// ip address to bind to
     #[arg(short, long, default_value = "127.0.0.1")]
     ip: String,
 
-    /// Port to listen to
     #[arg(short, long, default_value_t = 8080)]
     port: u16,
 }
@@ -126,6 +152,7 @@ async fn main() {
         state: ServerState::Disconnected,
         tx: tx.clone(),
         shutdown: shutdown.clone(),
+        todos: Vec::new(),
     }));
 
     service::setup_process_monitor(tx.clone());
