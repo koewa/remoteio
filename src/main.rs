@@ -6,6 +6,7 @@ use axum::{
     response::IntoResponse,
     routing::{get, get_service, Router},
 };
+use std::fs;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
@@ -76,6 +77,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
                                     if let Some(text) = json["text"].as_str() {
                                         let mut s = state.lock().await;
                                         s.todos.push(text.to_string());
+                                        save_todos(&s.todos);
                                         let list = serde_json::json!({"type":"todo_list","items": s.todos}).to_string();
                                         let _ = s.tx.send(list);
                                     }
@@ -86,6 +88,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
                                         let id = id as usize;
                                         if id < s.todos.len() {
                                             s.todos.remove(id);
+                                            save_todos(&s.todos);
                                             let list = serde_json::json!({"type":"todo_list","items": s.todos}).to_string();
                                             let _ = s.tx.send(list);
                                         }
@@ -141,6 +144,21 @@ struct Args {
     port: u16,
 }
 
+const TODO_FILE: &str = "todo_store.json";
+
+fn load_todos() -> Vec<String> {
+    fs::read_to_string(TODO_FILE)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+fn save_todos(todos: &[String]) {
+    if let Ok(json) = serde_json::to_string(todos) {
+        let _ = fs::write(TODO_FILE, &json);
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
@@ -152,7 +170,7 @@ async fn main() {
         state: ServerState::Disconnected,
         tx: tx.clone(),
         shutdown: shutdown.clone(),
-        todos: Vec::new(),
+        todos: load_todos(),
     }));
 
     service::setup_process_monitor(tx.clone());
