@@ -9,5 +9,6 @@
   "backup-cancel sync",
   "backup-show progress",
   "backup-show if the target is already in sync",
-  "backup-see list of files to be changed"
+  "backup-be able to select only parts of the files to be synced",
+  "backup-show the preview as a hierarchical view (expandable, indicating the amount of children)"
 ]

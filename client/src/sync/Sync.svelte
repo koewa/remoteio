@@ -96,6 +96,20 @@
     const entries = Object.entries($syncPreviews);
     activePreview = entries.length > 0 ? { name: entries[0][0], ...entries[0][1] } : null;
   }
+
+  function downloadPreview() {
+    if (!activePreview) return;
+    const lines = activePreview.files.map(f => `[${f.change}] ${f.path}`);
+    const text = `${activePreview.direction === 'push' ? 'Push' : 'Pull'} preview — ${activePreview.name}\n${'='.repeat(40)}\n${lines.join('\n')}`;
+    const blob = new Blob([text], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `sync-preview-${activePreview.name}-${activePreview.direction}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  }
 </script>
 
 <div class="sync">
@@ -227,7 +241,7 @@
         {:else}
           <div class="modal-file-list">
             {#each activePreview.files as f}
-              <span class="modal-file">{f}</span>
+              <span class="modal-file" class:deleted={f.change === 'deleted'}>{f.path}</span>
             {/each}
           </div>
         {/if}
@@ -237,6 +251,7 @@
           on:click={() => confirmSync(activePreview.name, activePreview.direction)}>
           Confirm {activePreview.direction === 'push' ? 'Push' : 'Pull'}
         </button>
+        <button class="btn" on:click={downloadPreview}>Download</button>
         <button class="btn" on:click={() => cancelPreview(activePreview.name)}>Cancel</button>
       </div>
     </div>
@@ -350,6 +365,7 @@
     display: flex; flex-direction: column; gap: 2px;
   }
   .modal-file { font-size: 0.8rem; color: #8b949e; font-family: monospace; }
+  .modal-file.deleted { color: #ff7b72; }
   .preview-empty { font-size: 0.9rem; color: #8b949e; }
   .modal-footer {
     display: flex; gap: 8px; padding: 12px 20px; border-top: 1px solid #30363d;

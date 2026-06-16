@@ -145,7 +145,20 @@ pub async fn handle_message(json: &Value, state: &Arc<Mutex<Status>>, socket: &m
             let files = match output {
                 Ok(out) if out.status.success() => {
                     let stdout = String::from_utf8_lossy(&out.stdout);
-                    stdout.lines().filter(|l| !l.starts_with("sending") && !l.starts_with("receiving") && !l.starts_with("sent ") && !l.starts_with("total ") && !l.is_empty()).map(|l| l.to_string()).collect::<Vec<_>>()
+                    stdout.lines()
+                        .filter(|l| {
+                            !l.starts_with("sending") && !l.starts_with("receiving")
+                            && !l.starts_with("sent ") && !l.starts_with("total ")
+                            && !l.is_empty()
+                        })
+                        .map(|l| {
+                            if let Some(path) = l.strip_prefix("deleting ") {
+                                serde_json::json!({"path": path, "change": "deleted"})
+                            } else {
+                                serde_json::json!({"path": l, "change": "changed"})
+                            }
+                        })
+                        .collect::<Vec<_>>()
                 }
                 _ => vec![],
             };
