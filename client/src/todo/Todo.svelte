@@ -1,8 +1,13 @@
 <script>
+  import { onMount } from 'svelte';
   import { todos, send } from '../lib/ws.js';
 
   let newText = '';
   let dragFrom = null;
+
+  onMount(() => {
+    send({ type: 'todo_list' });
+  });
 
   function esc(s) {
     const d = document.createElement('div');
@@ -15,7 +20,6 @@
     if (text) {
       send({ type: 'todo_add', text });
       newText = '';
-      send({ type: 'todo_list' });
     }
   }
 
@@ -25,7 +29,6 @@
 
   function remove(id) {
     send({ type: 'todo_remove', id });
-    send({ type: 'todo_list' });
   }
 
   function dragstart(e, id) {
@@ -57,7 +60,6 @@
     e.currentTarget.classList.remove('drag-over');
     if (dragFrom !== null && dragFrom !== to) {
       send({ type: 'todo_reorder', from: dragFrom, to });
-      send({ type: 'todo_list' });
     }
     dragFrom = null;
   }
@@ -79,13 +81,12 @@
       if (text && text !== original) {
         send({ type: 'todo_edit', id, text });
       }
-      send({ type: 'todo_list' });
     }
 
     input.addEventListener('blur', finish);
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') input.blur();
-      if (e.key === 'Escape') send({ type: 'todo_list' });
+      if (e.key === 'Escape') input.value = original;
     });
   }
 </script>
