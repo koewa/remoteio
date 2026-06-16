@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::broadcast::Sender;
 use tokio::sync::Notify;
@@ -13,5 +14,5 @@ pub struct Status {
     pub tx: Sender<String>,
     pub shutdown: Arc<Notify>,
     pub todos: Vec<String>,
-    pub syncing: Option<String>,
+    pub syncing: HashSet<String>,
 }

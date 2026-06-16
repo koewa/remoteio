@@ -105,7 +105,7 @@ pub(crate) async fn initiate_sync(json: &Value, state: &Arc<Mutex<Status>>, targ
     };
 
     let target_name = match json["name"].as_str() {
-        Some(n) => n,
+        Some(n) => n.to_string(),
         None => return false,
     };
 
@@ -122,10 +122,9 @@ pub(crate) async fn initiate_sync(json: &Value, state: &Arc<Mutex<Status>>, targ
 
     {
         let mut s = state.lock().await;
-        if s.syncing.is_some() {
+        if !s.syncing.insert(target_name.clone()) {
             return false;
         }
-        s.syncing = Some(format!("{}-{}", direction, target_name));
         let _ = s.tx.send(
             serde_json::json!({"type":"sync_status","direction":direction,"name":target_name,"status":"starting"}).to_string(),
         );
@@ -133,10 +132,11 @@ pub(crate) async fn initiate_sync(json: &Value, state: &Arc<Mutex<Status>>, targ
 
     let state_clone = state.clone();
     let dir = direction.to_string();
+    let tn = target_name.clone();
     tokio::spawn(async move {
         let result = run_sync_for_target(&target, &dir).await;
         let mut s = state_clone.lock().await;
-        s.syncing = None;
+        s.syncing.remove(&tn);
         let msg = match result {
             Ok(summary) => serde_json::json!({
                 "type": "sync_result",
@@ -186,6 +186,7 @@ async fn run_sync_for_target(target: &SyncTarget, direction: &str) -> Result<Str
 mod tests {
     use super::*;
     use crate::services::types::ServerState;
+    use std::collections::HashSet;
     use std::time::Duration;
     use tokio::sync::broadcast::channel;
     use tokio::sync::Notify;
@@ -206,7 +207,7 @@ mod tests {
             tx,
             shutdown: Arc::new(Notify::new()),
             todos: vec![],
-            syncing: None,
+            syncing: HashSet::new(),
         }));
 
         let targets = vec![make_target("MyLaptop")];
@@ -226,7 +227,7 @@ mod tests {
 
         {
             let s = state.lock().await;
-            assert_eq!(s.syncing.as_deref(), Some("push-MyLaptop"));
+            assert!(s.syncing.contains("MyLaptop"));
         }
     }
 
@@ -238,7 +239,7 @@ mod tests {
             tx,
             shutdown: Arc::new(Notify::new()),
             todos: vec![],
-            syncing: None,
+            syncing: HashSet::new(),
         }));
 
         let targets = vec![make_target("Existing")];
@@ -264,7 +265,7 @@ mod tests {
             tx,
             shutdown: Arc::new(Notify::new()),
             todos: vec![],
-            syncing: None,
+            syncing: HashSet::new(),
         }));
 
         let json = serde_json::json!({"type":"sync_push"});
@@ -272,27 +273,58 @@ mod tests {
         assert!(!result);
 
         let s = state.lock().await;
-        assert!(s.syncing.is_none());
+        assert!(s.syncing.is_empty());
     }
 
     #[tokio::test]
-    async fn test_ignore_concurrent_sync() {
+    async fn test_ignore_concurrent_same_target() {
         let (tx, _) = channel::<String>(16);
         let state = Arc::new(Mutex::new(Status {
             state: ServerState::Disconnected,
             tx,
             shutdown: Arc::new(Notify::new()),
             todos: vec![],
-            syncing: Some("push-Old".to_string()),
+            syncing: HashSet::from(["Old".to_string()]),
         }));
 
-        let targets = vec![make_target("MyLaptop")];
-        let json = serde_json::json!({"type":"sync_push","name":"MyLaptop"});
+        let targets = vec![make_target("Old"), make_target("Other")];
+        let json = serde_json::json!({"type":"sync_push","name":"Old"});
         let result = initiate_sync(&json, &state, &targets).await;
-        assert!(!result); // ignored, not crashed
+        assert!(!result); // ignored, same target already syncing
 
         let s = state.lock().await;
-        assert_eq!(s.syncing.as_deref(), Some("push-Old"));
+        assert!(s.syncing.contains("Old"));
+        assert_eq!(s.syncing.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_different_targets_allowed() {
+        let (tx, mut rx) = channel::<String>(16);
+        let state = Arc::new(Mutex::new(Status {
+            state: ServerState::Disconnected,
+            tx,
+            shutdown: Arc::new(Notify::new()),
+            todos: vec![],
+            syncing: HashSet::from(["Existing".to_string()]),
+        }));
+
+        let targets = vec![make_target("Existing"), make_target("Other")];
+        let json = serde_json::json!({"type":"sync_pull","name":"Other"});
+        let result = initiate_sync(&json, &state, &targets).await;
+        assert!(!result);
+
+        let msg = tokio::time::timeout(Duration::from_millis(200), rx.recv())
+            .await
+            .expect("timeout")
+            .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&msg).unwrap();
+        assert_eq!(v["type"], "sync_status");
+        assert_eq!(v["name"], "Other");
+
+        let s = state.lock().await;
+        assert!(s.syncing.contains("Existing"));
+        assert!(s.syncing.contains("Other"));
+        assert_eq!(s.syncing.len(), 2);
     }
 
     #[tokio::test]

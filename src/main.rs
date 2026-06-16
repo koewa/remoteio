@@ -6,6 +6,7 @@ use axum::{
     response::IntoResponse,
     routing::{get, get_service, Router},
 };
+use std::collections::HashSet;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -91,7 +92,7 @@ async fn main() {
         tx: tx.clone(),
         shutdown: shutdown.clone(),
         todos: services::load_todos(),
-        syncing: None,
+        syncing: HashSet::new(),
     }));
 
     services::setup_process_monitor(tx.clone());
@@ -130,7 +131,7 @@ mod integration {
             tx: tx.clone(),
             shutdown: shutdown.clone(),
             todos: vec!["test todo".to_string()],
-            syncing: None,
+            syncing: HashSet::new(),
         }));
         services::setup_process_monitor(tx.clone());
 

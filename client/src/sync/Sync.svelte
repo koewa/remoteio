@@ -1,22 +1,14 @@
 <script>
   import { onMount } from 'svelte';
-  import { syncState, syncTargets, send } from '../lib/ws.js';
+  import { syncStates, syncTargets, send } from '../lib/ws.js';
 
   let targets = [];
-  let syncing = false;
-  let lastResult = null;
-
   let showAdd = false;
-  let editing = {}; // name → true
+  let editing = {};
 
   let form = { name: '', local: { host: '', path: '', user: '' }, remote: { host: '', path: '', user: '' } };
 
   $: targets = $syncTargets;
-
-  $: if ($syncState) {
-    syncing = $syncState.syncing;
-    lastResult = $syncState.lastResult;
-  }
 
   onMount(() => {
     send({ type: 'sync_list' });
@@ -82,9 +74,6 @@
 <div class="sync">
   <div class="header">
     <h2>Sync Targets</h2>
-    <span class="state-label" class:active={syncing}>
-      {#if syncing}Syncing ...{:else}Idle{/if}
-    </span>
     <button class="btn-add" on:click={startAdd}>+ Add Target</button>
   </div>
 
@@ -150,9 +139,13 @@
         </div>
       </div>
     {:else}
-      <div class="card">
+      {@const state = $syncStates[target.name]}
+      <div class="card" class:syncing-active={state?.syncing}>
         <div class="card-header">
           <strong>{target.name}</strong>
+          {#if state?.syncing}
+            <span class="spinner" title="Syncing ({state.direction})"></span>
+          {/if}
         </div>
         <div class="card-paths">
           <span class="path">{epLabel(target.local)}</span>
@@ -160,11 +153,11 @@
           <span class="path">{epLabel(target.remote)}</span>
         </div>
         <div class="card-actions">
-          <button class="btn" class:disabled={syncing}
+          <button class="btn" class:disabled={state?.syncing}
             on:click={() => send({ type: 'sync_push', name: target.name })}>
             Push →
           </button>
-          <button class="btn" class:disabled={syncing}
+          <button class="btn" class:disabled={state?.syncing}
             on:click={() => send({ type: 'sync_pull', name: target.name })}>
             Pull ←
           </button>
@@ -172,21 +165,19 @@
           <button class="btn btn-copy" on:click={() => duplicateTarget(target)}>Duplicate</button>
           <button class="btn btn-del" on:click={() => deleteTarget(target.name)}>Delete</button>
         </div>
+        {#if state?.lastResult}
+          <div class="result status-{state.lastResult.status}">
+            <span class="icon">{state.lastResult.status === 'ok' ? '✓' : '✗'}</span>
+            <span class="detail">
+              {state.direction === 'push' ? 'Push' : state.direction === 'pull' ? 'Pull' : ''}
+              {state.lastResult.summary}
+              <span class="time">{state.lastResult.timestamp}</span>
+            </span>
+          </div>
+        {/if}
       </div>
     {/if}
   {/each}
-
-  {#if lastResult}
-    <div class="result status-{lastResult.status}">
-      <span class="icon">{lastResult.status === 'ok' ? '✓' : '✗'}</span>
-      <span class="detail">
-        {#if lastResult.name}<strong>{lastResult.name}</strong> — {/if}
-        {lastResult.direction === 'push' ? 'Push' : lastResult.direction === 'pull' ? 'Pull' : ''}
-        {lastResult.summary}
-        <span class="time">{lastResult.timestamp}</span>
-      </span>
-    </div>
-  {/if}
 </div>
 
 <style>
@@ -196,11 +187,6 @@
     display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
   }
   .header h2 { font-size: 1.1rem; color: #c9d1d9; }
-  .state-label {
-    font-size: 0.8rem; color: #8b949e; padding: 2px 8px;
-    border-radius: 4px; background: #161b22;
-  }
-  .state-label.active { color: #d29922; }
 
   .btn-add {
     margin-left: auto; padding: 6px 14px; border: 1px solid #238636;
@@ -215,11 +201,19 @@
     background: #161b22; border: 1px solid #30363d; border-radius: 8px;
     padding: 16px; margin-bottom: 12px;
   }
+  .card.syncing-active { border-color: #d29922; }
   .form-card { border-color: #58a6ff; }
   .form-card h3 { font-size: 0.95rem; color: #58a6ff; margin-bottom: 12px; }
 
-  .card-header { margin-bottom: 6px; }
+  .card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
   .card-header strong { font-size: 0.95rem; color: #58a6ff; }
+
+  .spinner {
+    width: 12px; height: 12px; border: 2px solid #d29922;
+    border-top-color: transparent; border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
 
   .card-paths {
     display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
