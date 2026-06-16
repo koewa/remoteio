@@ -21,6 +21,37 @@ pub struct SyncTarget {
     pub name: String,
     pub local: SyncEndpoint,
     pub remote: SyncEndpoint,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_synced: Option<String>,
+}
+
+fn current_timestamp() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let mut z = secs as i64 / 86400;
+    let mut y = 1970i64;
+    loop {
+        let days = if (y % 4 == 0 && y % 100 != 0) || y % 400 == 0 { 366 } else { 365 };
+        if z < days { break; }
+        z -= days;
+        y += 1;
+    }
+    let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+    let md: &[i64] = if leap { &[31,29,31,30,31,30,31,31,30,31,30,31] } else { &[31,28,31,30,31,30,31,31,30,31,30,31] };
+    let mut m = 1i64;
+    for &d in md {
+        if z < d { break; }
+        z -= d;
+        m += 1;
+    }
+    let d = z + 1;
+    let rem = secs % 86400;
+    let h = rem / 3600;
+    let mi = (rem % 3600) / 60;
+    let s = rem % 60;
+    format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}", y, m, d, h, mi, s)
 }
 
 fn endpoint_to_rsync_path(ep: &SyncEndpoint) -> String {
@@ -137,23 +168,40 @@ pub(crate) async fn initiate_sync(json: &Value, state: &Arc<Mutex<Status>>, targ
         let result = run_sync_for_target(&target, &dir).await;
         let mut s = state_clone.lock().await;
         s.syncing.remove(&tn);
-        let msg = match result {
-            Ok(summary) => serde_json::json!({
-                "type": "sync_result",
-                "direction": dir,
-                "name": target.name,
-                "status": "ok",
-                "summary": summary,
-            }),
-            Err(e) => serde_json::json!({
-                "type": "sync_result",
-                "direction": dir,
-                "name": target.name,
-                "status": "error",
-                "message": e,
-            }),
+        let (msg, ok) = match &result {
+            Ok(summary) => (
+                serde_json::json!({
+                    "type": "sync_result",
+                    "direction": dir,
+                    "name": target.name,
+                    "status": "ok",
+                    "summary": summary,
+                }),
+                true,
+            ),
+            Err(e) => (
+                serde_json::json!({
+                    "type": "sync_result",
+                    "direction": dir,
+                    "name": target.name,
+                    "status": "error",
+                    "message": e,
+                }),
+                false,
+            ),
         };
         let _ = s.tx.send(msg.to_string());
+        drop(s);
+
+        if ok {
+            let mut targets = load_targets();
+            if let Some(t) = targets.iter_mut().find(|t| t.name == tn) {
+                t.last_synced = Some(current_timestamp());
+                save_targets(&targets);
+                let s = state_clone.lock().await;
+                broadcast_list(&s.tx, &targets);
+            }
+        }
     });
 
     false
@@ -196,6 +244,7 @@ mod tests {
             name: name.into(),
             local: SyncEndpoint { host: String::new(), path: "/local/".into(), user: String::new() },
             remote: SyncEndpoint { host: "remote.local".into(), path: "/remote/".into(), user: "user".into() },
+            last_synced: None,
         }
     }
 
@@ -401,6 +450,7 @@ mod tests {
                 name: "Test".into(),
                 local: SyncEndpoint { host: String::new(), path: "/local/".into(), user: String::new() },
                 remote: SyncEndpoint { host: "remote.local".into(), path: "/remote/".into(), user: "user".into() },
+                last_synced: None,
             },
         ];
 

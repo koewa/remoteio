@@ -69,6 +69,11 @@
     form = copy;
     editing[copy.name] = true;
   }
+
+  function fmtTime(ts) {
+    if (!ts) return '';
+    return ts;
+  }
 </script>
 
 <div class="sync">
@@ -152,6 +157,9 @@
           <span class="arrow">⇄</span>
           <span class="path">{epLabel(target.remote)}</span>
         </div>
+        {#if target.last_synced}
+          <div class="last-synced">Last synced: {fmtTime(target.last_synced)}</div>
+        {/if}
         <div class="card-actions">
           <button class="btn" class:disabled={state?.syncing}
             on:click={() => send({ type: 'sync_push', name: target.name })}>
@@ -221,6 +229,8 @@
   }
   .path { color: #8b949e; }
   .arrow { color: #484f58; }
+
+  .last-synced { font-size: 0.75rem; color: #484f58; margin-bottom: 12px; }
 
   .card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .form-actions { display: flex; gap: 8px; margin-top: 12px; }
