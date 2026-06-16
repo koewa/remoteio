@@ -1,5 +1,6 @@
 <script>
   import { processes, connected, send } from '../lib/ws.js';
+  import Server from '../server/Server.svelte';
 
   let filter = '';
   let sortCol = 'pid';
@@ -55,6 +56,11 @@
   let sortCls = (col) => sortCol === col ? 'sorted' : '';
 </script>
 
+<div class="process-toolbar">
+  <span class="count">Processes: {$processes.length}</span>
+  <Server />
+</div>
+
 <div class="search">
   <input type="text" id="filter" placeholder="Filter by name, pid, or user..." bind:value={filter}>
 </div>
@@ -97,6 +103,11 @@
 </div>
 
 <style>
+  .process-toolbar {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
+  }
+  .count { font-size: 0.85rem; color: #8b949e; }
+
   .search { margin-bottom: 12px; }
   .search input {
     width: 100%; max-width: 320px; padding: 6px 12px;

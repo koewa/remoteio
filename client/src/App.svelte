@@ -1,23 +1,11 @@
 <script>
   import { onMount } from "svelte";
-  import { connect, connected, processes } from "./lib/ws.js";
-  import Server from "./server/Server.svelte";
+  import { connect, connected } from "./lib/ws.js";
   import Process from "./process/Process.svelte";
   import Todo from "./todo/Todo.svelte";
   import Sync from "./sync/Sync.svelte";
 
   let activeTab = "sync";
-  let statusEl;
-  let countEl;
-
-  $: if (countEl) {
-    countEl.textContent = `processes: ${$processes.length}`;
-  }
-  $: if (statusEl) {
-    statusEl.textContent = $connected
-      ? "status: connected"
-      : "status: disconnected";
-  }
 
   onMount(() => {
     connect();
@@ -27,9 +15,7 @@
 <h1>RemoteIO</h1>
 
 <div class="meta">
-  <span bind:this={countEl}>processes: --</span>
-  <span bind:this={statusEl}>status: connecting</span>
-  <Server />
+  <span>status: {$connected ? "connected" : "disconnected"}</span>
 </div>
 
 <div class="tabs">
@@ -46,7 +32,7 @@
   <button
     class="tab"
     class:active={activeTab === "processes"}
-    onclick={() => (activeTab = "processes")}>Processes</button
+    onclick={() => (activeTab = "processes")}>Server</button
   >
 </div>
 
