@@ -8,29 +8,15 @@ use axum::{
 };
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::net::TcpListener;
-use tokio::sync::broadcast::{channel, Sender};
+use tokio::sync::broadcast::channel;
 use tokio::sync::Mutex;
 use tokio::sync::Notify;
 use tower_http::services::ServeFile;
 use clap::Parser;
 
 mod services;
-
-#[derive(Debug)]
-enum ServerState {
-    Connected,
-    Disconnected,
-}
-
-struct Status {
-    state: ServerState,
-    nbr_of_calls: u32,
-    tx: Sender<String>,
-    shutdown: Arc<Notify>,
-    todos: Vec<String>,
-}
+use services::types::{ServerState, Status};
 
 async fn websocket_handler(
     State(state): State<Arc<Mutex<Status>>>,
@@ -58,36 +44,10 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
                     Message::Text(msg) => {
                         println!("Received message: {}", msg);
                         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&msg) {
-                            match json["type"].as_str() {
-                                Some("shutdown") => {
-                                    let _ = socket.send(Message::Text("Server shutting down...".into())).await;
-                                    let _ = state.lock().await.tx.send("Server shutting down...".to_string());
-                                    state.lock().await.shutdown.notify_one();
-                                    tokio::time::sleep(Duration::from_millis(500)).await;
+                            if let Some(type_str) = json["type"].as_str() {
+                                if services::dispatch(type_str, &json, &state, &mut socket).await {
                                     break;
                                 }
-                                Some("todo_list") => {
-                                    let s = state.lock().await;
-                                    let msg = services::todo::get_list_msg(&s.todos);
-                                    if socket.send(Message::Text(msg.into())).await.is_err() {
-                                        break;
-                                    }
-                                }
-                                Some("todo_add") => {
-                                    if let Some(text) = json["text"].as_str() {
-                                        let mut s = state.lock().await;
-                                        let tx = s.tx.clone();
-                                        services::todo::handle_add(&mut s.todos, text, &tx);
-                                    }
-                                }
-                                Some("todo_remove") => {
-                                    if let Some(id) = json["id"].as_u64() {
-                                        let mut s = state.lock().await;
-                                        let tx = s.tx.clone();
-                                        services::todo::handle_remove(&mut s.todos, id as usize, &tx);
-                                    }
-                                }
-                                _ => {}
                             }
                         } else {
                             {
