@@ -9,15 +9,23 @@ const TODO_FILE: &str = "todo_store.json";
 pub const MESSAGE_TYPES: &[&str] = &["todo_list", "todo_add", "todo_remove", "todo_reorder", "todo_edit"];
 
 pub fn load_todos() -> Vec<String> {
-    fs::read_to_string(TODO_FILE)
+    load_todos_from(TODO_FILE)
+}
+
+fn load_todos_from(path: &str) -> Vec<String> {
+    fs::read_to_string(path)
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default()
 }
 
 fn save_todos(todos: &[String]) {
+    save_todos_to(TODO_FILE, todos);
+}
+
+fn save_todos_to(path: &str, todos: &[String]) {
     if let Ok(json) = serde_json::to_string_pretty(todos) {
-        let _ = fs::write(TODO_FILE, &json);
+        let _ = fs::write(path, &json);
     }
 }
 
@@ -92,5 +100,116 @@ pub async fn handle_message(json: &Value, state: &mut Status, socket: &mut WebSo
             false
         }
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::sync::broadcast::channel;
+
+    #[test]
+    fn test_get_list_msg() {
+        let todos = vec!["alpha".to_string(), "beta".to_string()];
+        let msg = get_list_msg(&todos);
+        let v: serde_json::Value = serde_json::from_str(&msg).unwrap();
+        assert_eq!(v["type"], "todo_list");
+        assert_eq!(v["items"][0], "alpha");
+        assert_eq!(v["items"][1], "beta");
+    }
+
+    #[test]
+    fn test_handle_add() {
+        let mut todos = vec![];
+        let (tx, mut rx) = channel::<String>(16);
+        handle_add(&mut todos, "hello", &tx);
+        assert_eq!(todos, vec!["hello"]);
+        let broadcast = rx.try_recv().unwrap();
+        assert!(broadcast.contains(r#""type":"todo_list""#));
+    }
+
+    #[test]
+    fn test_handle_remove() {
+        let mut todos = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        let (tx, _) = channel::<String>(16);
+        handle_remove(&mut todos, 1, &tx);
+        assert_eq!(todos, vec!["a", "c"]);
+    }
+
+    #[test]
+    fn test_handle_remove_out_of_bounds() {
+        let mut todos = vec!["a".to_string()];
+        let (tx, _) = channel::<String>(16);
+        handle_remove(&mut todos, 5, &tx);
+        assert_eq!(todos.len(), 1);
+    }
+
+    #[test]
+    fn test_handle_reorder() {
+        let mut todos = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        let (tx, _) = channel::<String>(16);
+        handle_reorder(&mut todos, 0, 2, &tx);
+        assert_eq!(todos, vec!["b", "c", "a"]);
+    }
+
+    #[test]
+    fn test_handle_reorder_same_index() {
+        let mut todos = vec!["a".to_string(), "b".to_string()];
+        let (tx, _) = channel::<String>(16);
+        handle_reorder(&mut todos, 0, 0, &tx);
+        assert_eq!(todos, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn test_handle_edit() {
+        let mut todos = vec!["a".to_string(), "b".to_string()];
+        let (tx, _) = channel::<String>(16);
+        handle_edit(&mut todos, 0, "edited", &tx);
+        assert_eq!(todos, vec!["edited", "b"]);
+    }
+
+    #[test]
+    fn test_handle_edit_out_of_bounds() {
+        let mut todos = vec!["a".to_string()];
+        let (tx, _) = channel::<String>(16);
+        handle_edit(&mut todos, 5, "x", &tx);
+        assert_eq!(todos, vec!["a"]);
+    }
+
+    #[test]
+    fn test_broadcast_list() {
+        let todos = vec!["hello".to_string()];
+        let (tx, mut rx) = channel::<String>(16);
+        broadcast_list(&todos, &tx);
+        let msg = rx.try_recv().unwrap();
+        let v: serde_json::Value = serde_json::from_str(&msg).unwrap();
+        assert_eq!(v["type"], "todo_list");
+        assert_eq!(v["items"][0], "hello");
+    }
+
+    #[test]
+    fn test_save_and_load() {
+        let tmp = std::env::temp_dir().join("test_remoteio_todos.json");
+        let todos = vec!["one".to_string(), "two".to_string()];
+        save_todos_to(tmp.to_str().unwrap(), &todos);
+        let loaded = load_todos_from(tmp.to_str().unwrap());
+        assert_eq!(loaded, todos);
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn test_load_missing_file() {
+        let tmp = std::env::temp_dir().join("test_remoteio_nonexistent.json");
+        let loaded = load_todos_from(tmp.to_str().unwrap());
+        assert!(loaded.is_empty());
+    }
+
+    #[test]
+    fn test_load_corrupt_file() {
+        let tmp = std::env::temp_dir().join("test_remoteio_corrupt.json");
+        std::fs::write(&tmp, "not json").unwrap();
+        let loaded = load_todos_from(tmp.to_str().unwrap());
+        assert!(loaded.is_empty());
+        let _ = std::fs::remove_file(&tmp);
     }
 }

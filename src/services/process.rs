@@ -64,3 +64,45 @@ pub fn setup_process_monitor(tx: Sender<String>) {
         }
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_collect_processes_non_empty() {
+        let procs = collect_processes();
+        assert!(!procs.is_empty(), "should find at least init/systemd");
+    }
+
+    #[test]
+    fn test_collect_processes_includes_pid_1() {
+        let procs = collect_processes();
+        assert!(procs.iter().any(|p| p.pid == 1), "pid 1 should exist");
+    }
+
+    #[test]
+    fn test_collect_processes_fields() {
+        let procs = collect_processes();
+        for p in &procs {
+            assert!(p.pid > 0, "pid should be positive");
+            assert!(!p.name.is_empty(), "name should not be empty");
+        }
+    }
+
+    #[test]
+    fn test_process_serialization() {
+        let ps = ProcessInfo {
+            pid: 42,
+            name: "test".into(),
+            state: "R".into(),
+            uid: 1000,
+            rss_kb: 4096,
+            cpu_time_sec: 1.5,
+            cmdline: "/bin/test --foo".into(),
+        };
+        let json = serde_json::to_string(&ps).unwrap();
+        assert!(json.contains("\"pid\":42"));
+        assert!(json.contains("\"name\":\"test\""));
+    }
+}
