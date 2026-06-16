@@ -1,24 +1,92 @@
 use crate::services::types::Status;
-use axum::extract::ws::WebSocket;
+use axum::extract::ws::{Message, WebSocket};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-pub const MESSAGE_TYPES: &[&str] = &["sync_push", "sync_pull"];
+pub const MESSAGE_TYPES: &[&str] = &["sync_list", "sync_push", "sync_pull"];
 
-const LOCAL_DIR: &str = "/home/koewa/git/remoteio/huis/";
-const REMOTE: &str = "koewa@koewa-precision-5530.local";
-const REMOTE_DIR: &str = "~/Documents/huis/";
+const CONFIG_FILE: &str = "sync_config.json";
 
-pub async fn handle_message(json: &Value, state: &Arc<Mutex<Status>>, _socket: &mut WebSocket) -> bool {
-    initiate_sync(json, state).await
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncEndpoint {
+    pub host: String,
+    pub path: String,
+    pub user: String,
 }
 
-pub(crate) async fn initiate_sync(json: &Value, state: &Arc<Mutex<Status>>) -> bool {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncTarget {
+    pub name: String,
+    pub local: SyncEndpoint,
+    pub remote: SyncEndpoint,
+}
+
+fn endpoint_to_rsync_path(ep: &SyncEndpoint) -> String {
+    if ep.host.is_empty() {
+        ep.path.clone()
+    } else if ep.user.is_empty() {
+        format!("{}:{}", ep.host, ep.path)
+    } else {
+        format!("{}@{}:{}", ep.user, ep.host, ep.path)
+    }
+}
+
+pub fn load_targets() -> Vec<SyncTarget> {
+    std::fs::read_to_string(CONFIG_FILE)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+#[allow(dead_code)]
+fn save_targets(targets: &[SyncTarget]) {
+    if let Ok(json) = serde_json::to_string_pretty(targets) {
+        let _ = std::fs::write(CONFIG_FILE, &json);
+    }
+}
+
+pub async fn handle_message(json: &Value, state: &Arc<Mutex<Status>>, socket: &mut WebSocket) -> bool {
+    match json["type"].as_str() {
+        Some("sync_list") => {
+            let targets = load_targets();
+            let msg = serde_json::json!({"type":"sync_list","targets": targets}).to_string();
+            println!("{}", msg);
+            if socket.send(Message::Text(msg.into())).await.is_err() {
+                return true;
+            }
+            false
+        }
+        Some("sync_push") | Some("sync_pull") => {
+            let targets = load_targets();
+            initiate_sync(json, state, &targets).await
+        }
+        _ => false,
+    }
+}
+
+pub(crate) async fn initiate_sync(json: &Value, state: &Arc<Mutex<Status>>, targets: &[SyncTarget]) -> bool {
     let direction = match json["type"].as_str() {
         Some("sync_push") => "push",
         Some("sync_pull") => "pull",
         _ => return false,
+    };
+
+    let target_name = match json["name"].as_str() {
+        Some(n) => n,
+        None => return false,
+    };
+
+    let target = match targets.iter().find(|t| t.name == target_name) {
+        Some(t) => t.clone(),
+        None => {
+            let s = state.lock().await;
+            let _ = s.tx.send(
+                serde_json::json!({"type":"sync_result","direction":direction,"status":"error","message":format!("Unknown target: {}", target_name)}).to_string(),
+            );
+            return false;
+        }
     };
 
     {
@@ -26,28 +94,30 @@ pub(crate) async fn initiate_sync(json: &Value, state: &Arc<Mutex<Status>>) -> b
         if s.syncing.is_some() {
             return false;
         }
-        s.syncing = Some(direction.to_string());
+        s.syncing = Some(format!("{}-{}", direction, target_name));
         let _ = s.tx.send(
-            serde_json::json!({"type":"sync_status","direction":direction,"status":"starting"}).to_string(),
+            serde_json::json!({"type":"sync_status","direction":direction,"name":target_name,"status":"starting"}).to_string(),
         );
     }
 
     let state_clone = state.clone();
     let dir = direction.to_string();
     tokio::spawn(async move {
-        let result = run_sync(&dir).await;
+        let result = run_sync_for_target(&target, &dir).await;
         let mut s = state_clone.lock().await;
         s.syncing = None;
         let msg = match result {
             Ok(summary) => serde_json::json!({
                 "type": "sync_result",
                 "direction": dir,
+                "name": target.name,
                 "status": "ok",
                 "summary": summary,
             }),
             Err(e) => serde_json::json!({
                 "type": "sync_result",
                 "direction": dir,
+                "name": target.name,
                 "status": "error",
                 "message": e,
             }),
@@ -58,11 +128,10 @@ pub(crate) async fn initiate_sync(json: &Value, state: &Arc<Mutex<Status>>) -> b
     false
 }
 
-async fn run_sync(direction: &str) -> Result<String, String> {
-    let remote_path = format!("{}:{}", REMOTE, REMOTE_DIR);
+async fn run_sync_for_target(target: &SyncTarget, direction: &str) -> Result<String, String> {
     let (src, dst) = match direction {
-        "push" => (LOCAL_DIR.to_string(), remote_path),
-        "pull" => (remote_path, LOCAL_DIR.to_string()),
+        "push" => (endpoint_to_rsync_path(&target.local), endpoint_to_rsync_path(&target.remote)),
+        "pull" => (endpoint_to_rsync_path(&target.remote), endpoint_to_rsync_path(&target.local)),
         _ => return Err("Invalid direction".to_string()),
     };
 
@@ -90,6 +159,14 @@ mod tests {
     use tokio::sync::broadcast::channel;
     use tokio::sync::Notify;
 
+    fn make_target(name: &str) -> SyncTarget {
+        SyncTarget {
+            name: name.into(),
+            local: SyncEndpoint { host: String::new(), path: "/local/".into(), user: String::new() },
+            remote: SyncEndpoint { host: "remote.local".into(), path: "/remote/".into(), user: "user".into() },
+        }
+    }
+
     #[tokio::test]
     async fn test_sync_push_broadcasts_status() {
         let (tx, mut rx) = channel::<String>(16);
@@ -101,29 +178,29 @@ mod tests {
             syncing: None,
         }));
 
-        let json = serde_json::json!({"type":"sync_push"});
-        let result = initiate_sync(&json, &state).await;
-        assert!(!result); // false = socket stays open
+        let targets = vec![make_target("MyLaptop")];
+        let json = serde_json::json!({"type":"sync_push","name":"MyLaptop"});
+        let result = initiate_sync(&json, &state, &targets).await;
+        assert!(!result);
 
-        // sync_status should be broadcast
         let msg = tokio::time::timeout(Duration::from_millis(200), rx.recv())
             .await
-            .expect("timeout waiting for sync_status")
+            .expect("timeout")
             .unwrap();
         let v: serde_json::Value = serde_json::from_str(&msg).unwrap();
         assert_eq!(v["type"], "sync_status");
         assert_eq!(v["direction"], "push");
+        assert_eq!(v["name"], "MyLaptop");
         assert_eq!(v["status"], "starting");
 
-        // syncing should be set
         {
             let s = state.lock().await;
-            assert_eq!(s.syncing.as_deref(), Some("push"));
+            assert_eq!(s.syncing.as_deref(), Some("push-MyLaptop"));
         }
     }
 
     #[tokio::test]
-    async fn test_sync_pull_broadcasts_status() {
+    async fn test_sync_unknown_target() {
         let (tx, mut rx) = channel::<String>(16);
         let state = Arc::new(Mutex::new(Status {
             state: ServerState::Disconnected,
@@ -133,8 +210,9 @@ mod tests {
             syncing: None,
         }));
 
-        let json = serde_json::json!({"type":"sync_pull"});
-        let result = initiate_sync(&json, &state).await;
+        let targets = vec![make_target("Existing")];
+        let json = serde_json::json!({"type":"sync_pull","name":"NonExistent"});
+        let result = initiate_sync(&json, &state, &targets).await;
         assert!(!result);
 
         let msg = tokio::time::timeout(Duration::from_millis(200), rx.recv())
@@ -142,13 +220,28 @@ mod tests {
             .expect("timeout")
             .unwrap();
         let v: serde_json::Value = serde_json::from_str(&msg).unwrap();
-        assert_eq!(v["type"], "sync_status");
-        assert_eq!(v["direction"], "pull");
+        assert_eq!(v["type"], "sync_result");
+        assert_eq!(v["status"], "error");
+        assert!(v["message"].as_str().unwrap().contains("Unknown target"));
+    }
 
-        {
-            let s = state.lock().await;
-            assert_eq!(s.syncing.as_deref(), Some("pull"));
-        }
+    #[tokio::test]
+    async fn test_sync_push_missing_name() {
+        let (tx, _) = channel::<String>(16);
+        let state = Arc::new(Mutex::new(Status {
+            state: ServerState::Disconnected,
+            tx,
+            shutdown: Arc::new(Notify::new()),
+            todos: vec![],
+            syncing: None,
+        }));
+
+        let json = serde_json::json!({"type":"sync_push"});
+        let result = initiate_sync(&json, &state, &[]).await;
+        assert!(!result);
+
+        let s = state.lock().await;
+        assert!(s.syncing.is_none());
     }
 
     #[tokio::test]
@@ -159,14 +252,54 @@ mod tests {
             tx,
             shutdown: Arc::new(Notify::new()),
             todos: vec![],
-            syncing: Some("push".to_string()),
+            syncing: Some("push-Old".to_string()),
         }));
 
-        let json = serde_json::json!({"type":"sync_push"});
-        let result = initiate_sync(&json, &state).await;
+        let targets = vec![make_target("MyLaptop")];
+        let json = serde_json::json!({"type":"sync_push","name":"MyLaptop"});
+        let result = initiate_sync(&json, &state, &targets).await;
         assert!(!result); // ignored, not crashed
 
         let s = state.lock().await;
-        assert_eq!(s.syncing.as_deref(), Some("push"));
+        assert_eq!(s.syncing.as_deref(), Some("push-Old"));
+    }
+
+    #[tokio::test]
+    async fn test_endpoint_to_rsync_path() {
+        let local = SyncEndpoint { host: String::new(), path: "/local/path/".into(), user: String::new() };
+        assert_eq!(endpoint_to_rsync_path(&local), "/local/path/");
+
+        let remote = SyncEndpoint { host: "example.com".into(), path: "~/remote/".into(), user: "alice".into() };
+        assert_eq!(endpoint_to_rsync_path(&remote), "alice@example.com:~/remote/");
+
+        let no_user = SyncEndpoint { host: "backup.local".into(), path: "/backups/".into(), user: String::new() };
+        assert_eq!(endpoint_to_rsync_path(&no_user), "backup.local:/backups/");
+    }
+
+    #[tokio::test]
+    async fn test_load_save_targets() {
+        let tmp = std::env::temp_dir().join("test_sync_config.json");
+        let targets = vec![
+            SyncTarget {
+                name: "Test".into(),
+                local: SyncEndpoint { host: String::new(), path: "/local/".into(), user: String::new() },
+                remote: SyncEndpoint { host: "remote.local".into(), path: "/remote/".into(), user: "user".into() },
+            },
+        ];
+
+        // save to temp path (override CONFIG_FILE by writing directly)
+        let json = serde_json::to_string_pretty(&targets).unwrap();
+        std::fs::write(&tmp, &json).unwrap();
+
+        let loaded: Vec<SyncTarget> = std::fs::read_to_string(&tmp)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
+
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].name, "Test");
+        assert_eq!(loaded[0].remote.host, "remote.local");
+
+        let _ = std::fs::remove_file(&tmp);
     }
 }

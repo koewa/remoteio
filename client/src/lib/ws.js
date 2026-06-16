@@ -4,14 +4,25 @@ export const processes = writable([]);
 export const todos = writable([]);
 export const connected = writable(false);
 export const shuttingDown = writable(false);
-export const syncState = writable({ syncing: false, direction: null, lastResult: null });
+export const syncState = writable({ syncing: false, direction: null, name: null, lastResult: null });
+export const syncTargets = writable([]);
 
 let socket;
+let pending = [];
 
 export function send(msg) {
   if (socket && socket.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(msg));
+  } else {
+    pending.push(msg);
   }
+}
+
+function flushPending() {
+  for (const msg of pending) {
+    socket.send(JSON.stringify(msg));
+  }
+  pending = [];
 }
 
 export function connect() {
@@ -19,7 +30,7 @@ export function connect() {
 
   socket.onopen = () => {
     connected.set(true);
-    send({ type: 'todo_list' });
+    flushPending();
   };
 
   socket.onmessage = (event) => {
@@ -34,10 +45,12 @@ export function connect() {
         processes.set(data);
       } else if (data.type === 'todo_list') {
         todos.set(data.items || []);
+      } else if (data.type === 'sync_list') {
+        syncTargets.set(data.targets || []);
       } else if (data.type === 'sync_status') {
-        syncState.set({ syncing: true, direction: data.direction, lastResult: null });
+        syncState.set({ syncing: true, direction: data.direction, name: data.name || null, lastResult: null });
       } else if (data.type === 'sync_result') {
-        syncState.set({ syncing: false, direction: null, lastResult: { direction: data.direction, status: data.status, summary: data.summary || data.message, timestamp: new Date().toLocaleString() } });
+        syncState.set({ syncing: false, direction: null, name: null, lastResult: { name: data.name || null, direction: data.direction, status: data.status, summary: data.summary || data.message, timestamp: new Date().toLocaleString() } });
       }
     } catch (_) {}
   };

@@ -1,0 +1,28 @@
+[
+  {
+    "name": "Main Laptop",
+    "local": {
+      "host": "",
+      "path": "/home/koewa/git/remoteio/huis/",
+      "user": ""
+    },
+    "remote": {
+      "host": "koewa-precision-5530.local",
+      "path": "~/Documents/huis/",
+      "user": "koewa"
+    }
+  },
+  {
+    "name": "local",
+    "local": {
+      "host": "",
+      "path": "/home/koewa/Downloads/auto",
+      "user": ""
+    },
+    "remote": {
+      "host": "",
+      "path": "/home/koewa/Downloads/auto2",
+      "user": ""
+    }
+  }
+]
