@@ -264,8 +264,13 @@
                 btn.addEventListener("click", () => {
                     const id = parseInt(btn.dataset.id);
                     socket.send(JSON.stringify({type: "todo_remove", id}));
+                    requestTodoList();
                 });
             });
+        }
+
+        function requestTodoList() {
+            socket.send(JSON.stringify({type: "todo_list"}));
         }
 
         todoAddBtn.addEventListener("click", () => {
@@ -274,6 +279,7 @@
                 socket.send(JSON.stringify({type: "todo_add", text}));
                 todoInput.value = "";
                 todoInput.focus();
+                requestTodoList();
             }
         });
 
@@ -298,6 +304,7 @@
                 connectingEl.style.display = "none";
                 shutdownBtn.disabled = false;
                 shutdownBtn.textContent = "Shutdown Server";
+                socket.send(JSON.stringify({type: "todo_list"}));
             };
 
             socket.onmessage = (event) => {
