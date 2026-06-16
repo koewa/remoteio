@@ -76,13 +76,15 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
                                 Some("todo_add") => {
                                     if let Some(text) = json["text"].as_str() {
                                         let mut s = state.lock().await;
-                                        services::todo::handle_add(&mut s.todos, text);
+                                        let tx = s.tx.clone();
+                                        services::todo::handle_add(&mut s.todos, text, &tx);
                                     }
                                 }
                                 Some("todo_remove") => {
                                     if let Some(id) = json["id"].as_u64() {
                                         let mut s = state.lock().await;
-                                        services::todo::handle_remove(&mut s.todos, id as usize);
+                                        let tx = s.tx.clone();
+                                        services::todo::handle_remove(&mut s.todos, id as usize, &tx);
                                     }
                                 }
                                 _ => {}
@@ -106,7 +108,6 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
                 }
             }
             Ok(msg) = rx.recv() => {
-                //println!("Sending to client: {}", msg);
                 if socket.send(Message::Text(msg.into())).await.is_err() {
                     break;
                 }

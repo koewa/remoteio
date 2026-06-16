@@ -1,4 +1,5 @@
 use std::fs;
+use tokio::sync::broadcast::Sender;
 
 const TODO_FILE: &str = "todo_store.json";
 
@@ -15,15 +16,22 @@ fn save_todos(todos: &[String]) {
     }
 }
 
-pub fn handle_add(todos: &mut Vec<String>, text: &str) {
-    todos.push(text.to_string());
-    save_todos(todos);
+fn broadcast_list(todos: &[String], tx: &Sender<String>) {
+    let list = serde_json::json!({"type":"todo_list","items": todos}).to_string();
+    let _ = tx.send(list);
 }
 
-pub fn handle_remove(todos: &mut Vec<String>, id: usize) {
+pub fn handle_add(todos: &mut Vec<String>, text: &str, tx: &Sender<String>) {
+    todos.push(text.to_string());
+    save_todos(todos);
+    broadcast_list(todos, tx);
+}
+
+pub fn handle_remove(todos: &mut Vec<String>, id: usize, tx: &Sender<String>) {
     if id < todos.len() {
         todos.remove(id);
         save_todos(todos);
+        broadcast_list(todos, tx);
     }
 }
 
