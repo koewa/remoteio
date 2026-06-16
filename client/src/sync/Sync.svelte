@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { syncStates, syncTargets, send } from '../lib/ws.js';
+  import { syncStates, syncPreviews, syncTargets, send } from '../lib/ws.js';
 
   let targets = [];
   let showAdd = false;
@@ -73,6 +73,28 @@
   function fmtTime(ts) {
     if (!ts) return '';
     return ts;
+  }
+
+  function requestPreview(name, direction) {
+    send({ type: direction === 'push' ? 'sync_push_preview' : 'sync_pull_preview', name });
+  }
+
+  function cancelPreview(name) {
+    syncPreviews.update(previews => {
+      const { [name]: _, ...rest } = previews;
+      return rest;
+    });
+  }
+
+  function confirmSync(name, direction) {
+    cancelPreview(name);
+    send({ type: direction === 'push' ? 'sync_push' : 'sync_pull', name });
+  }
+
+  let activePreview = null;
+  $: {
+    const entries = Object.entries($syncPreviews);
+    activePreview = entries.length > 0 ? { name: entries[0][0], ...entries[0][1] } : null;
   }
 </script>
 
@@ -162,11 +184,11 @@
         {/if}
         <div class="card-actions">
           <button class="btn" class:disabled={state?.syncing}
-            on:click={() => send({ type: 'sync_push', name: target.name })}>
+            on:click={() => requestPreview(target.name, 'push')}>
             Push →
           </button>
           <button class="btn" class:disabled={state?.syncing}
-            on:click={() => send({ type: 'sync_pull', name: target.name })}>
+            on:click={() => requestPreview(target.name, 'pull')}>
             Pull ←
           </button>
           <button class="btn btn-edit" on:click={() => startEdit(target)}>Edit</button>
@@ -187,6 +209,39 @@
     {/if}
   {/each}
 </div>
+
+{#if activePreview}
+  <div class="modal-overlay" role="presentation"
+    on:click={() => cancelPreview(activePreview.name)}
+    on:keydown={(e) => e.key === 'Escape' && cancelPreview(activePreview.name)}>
+    <!-- svelte-ignore a11y_interactive_supports_focus a11y_click_events_have_key_events -->
+    <div class="modal" role="dialog" aria-modal="true" tabindex="-1"
+      on:click|stopPropagation>
+      <div class="modal-header">
+        <h3>{activePreview.direction === 'push' ? 'Push' : 'Pull'} preview — {activePreview.name}</h3>
+        <button class="modal-close" on:click={() => cancelPreview(activePreview.name)}>✕</button>
+      </div>
+      <div class="modal-body">
+        {#if activePreview.files.length === 0}
+          <div class="preview-empty">No changes</div>
+        {:else}
+          <div class="modal-file-list">
+            {#each activePreview.files as f}
+              <span class="modal-file">{f}</span>
+            {/each}
+          </div>
+        {/if}
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary"
+          on:click={() => confirmSync(activePreview.name, activePreview.direction)}>
+          Confirm {activePreview.direction === 'push' ? 'Push' : 'Pull'}
+        </button>
+        <button class="btn" on:click={() => cancelPreview(activePreview.name)}>Cancel</button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   .sync { max-width: 700px; }
@@ -274,4 +329,29 @@
 
   .icon { font-weight: 700; font-size: 1.1rem; }
   .time { color: #8b949e; margin-left: 8px; font-size: 0.75rem; }
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    display: flex; align-items: center; justify-content: center; z-index: 100;
+  }
+  .modal {
+    background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+    width: 90%; max-width: 700px; max-height: 80vh; display: flex; flex-direction: column;
+  }
+  .modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px; border-bottom: 1px solid #30363d;
+  }
+  .modal-header h3 { font-size: 1rem; color: #c9d1d9; }
+  .modal-close { background: none; border: none; color: #8b949e; font-size: 1.2rem; cursor: pointer; }
+  .modal-close:hover { color: #c9d1d9; }
+  .modal-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+  .modal-file-list {
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .modal-file { font-size: 0.8rem; color: #8b949e; font-family: monospace; }
+  .preview-empty { font-size: 0.9rem; color: #8b949e; }
+  .modal-footer {
+    display: flex; gap: 8px; padding: 12px 20px; border-top: 1px solid #30363d;
+  }
 </style>

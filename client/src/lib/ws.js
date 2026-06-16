@@ -5,6 +5,7 @@ export const todos = writable([]);
 export const connected = writable(false);
 export const shuttingDown = writable(false);
 export const syncStates = writable({});
+export const syncPreviews = writable({});
 export const syncTargets = writable([]);
 
 let socket;
@@ -58,6 +59,11 @@ export function connect() {
         syncStates.update(states => ({
           ...states,
           [data.name]: { syncing: false, direction: data.direction, lastResult: { status: data.status, summary: data.summary || data.message, timestamp: new Date().toLocaleString() } }
+        }));
+      } else if (data.type === 'sync_preview') {
+        syncPreviews.update(previews => ({
+          ...previews,
+          [data.name]: { direction: data.direction, files: data.files || [] }
         }));
       }
     } catch (_) {}

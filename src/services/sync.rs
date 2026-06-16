@@ -5,7 +5,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-pub const MESSAGE_TYPES: &[&str] = &["sync_list", "sync_save", "sync_delete", "sync_push", "sync_pull"];
+pub const MESSAGE_TYPES: &[&str] = &["sync_list", "sync_save", "sync_delete", "sync_push", "sync_pull", "sync_push_preview", "sync_pull_preview"];
 
 const CONFIG_FILE: &str = "sync_config.json";
 
@@ -118,6 +118,41 @@ pub async fn handle_message(json: &Value, state: &Arc<Mutex<Status>>, socket: &m
             save_targets(&targets);
             let s = state.lock().await;
             broadcast_list(&s.tx, &targets);
+            false
+        }
+        Some("sync_push_preview") | Some("sync_pull_preview") => {
+            let direction = match json["type"].as_str() {
+                Some("sync_push_preview") => "push",
+                _ => "pull",
+            };
+            let target_name = match json["name"].as_str() {
+                Some(n) => n,
+                None => return false,
+            };
+            let targets = load_targets();
+            let target = match targets.iter().find(|t| t.name == target_name) {
+                Some(t) => t.clone(),
+                None => return false,
+            };
+            let (src, dst) = match direction {
+                "push" => (endpoint_to_rsync_path(&target.local), endpoint_to_rsync_path(&target.remote)),
+                _ => (endpoint_to_rsync_path(&target.remote), endpoint_to_rsync_path(&target.local)),
+            };
+            let output = tokio::process::Command::new("rsync")
+                .args(["-avz", "--delete", "--dry-run", &src, &dst])
+                .output()
+                .await;
+            let files = match output {
+                Ok(out) if out.status.success() => {
+                    let stdout = String::from_utf8_lossy(&out.stdout);
+                    stdout.lines().filter(|l| !l.starts_with("sending") && !l.starts_with("receiving") && !l.starts_with("sent ") && !l.starts_with("total ") && !l.is_empty()).map(|l| l.to_string()).collect::<Vec<_>>()
+                }
+                _ => vec![],
+            };
+            let resp = serde_json::json!({"type":"sync_preview","name":target_name,"direction":direction,"files":files}).to_string();
+            if socket.send(Message::Text(resp.into())).await.is_err() {
+                return true;
+            }
             false
         }
         Some("sync_push") | Some("sync_pull") => {
