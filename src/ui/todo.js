@@ -26,7 +26,36 @@ function render() {
             send({type: "todo_list"});
         });
     });
-    todoList.querySelectorAll(".todo-item").forEach(item => {
+            todoList.querySelectorAll(".todo-text").forEach(span => {
+                const li = span.closest(".todo-item");
+                const id = parseInt(li.dataset.id);
+                span.addEventListener("dblclick", () => {
+                    const original = todos[id];
+                    const input = document.createElement("input");
+                    input.type = "text";
+                    input.value = original;
+                    input.maxLength = 200;
+                    input.className = "todo-edit-input";
+                    span.replaceWith(input);
+                    input.focus();
+                    input.select();
+
+                    function finish() {
+                        const text = input.value.trim();
+                        if (text && text !== original) {
+                            send({type: "todo_edit", id, text});
+                        }
+                        send({type: "todo_list"});
+                    }
+
+                    input.addEventListener("blur", finish);
+                    input.addEventListener("keydown", (e) => {
+                        if (e.key === "Enter") input.blur();
+                        if (e.key === "Escape") send({type: "todo_list"});
+                    });
+                });
+            });
+            todoList.querySelectorAll(".todo-item").forEach(item => {
         item.addEventListener("dragstart", (e) => {
             e.dataTransfer.setData("text/plain", item.dataset.id);
             item.classList.add("dragging");
