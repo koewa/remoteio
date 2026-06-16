@@ -9,5 +9,5 @@
   "backup-cancel sync",
   "backup-show progress",
   "backup-show if the target is already in sync",
-  "backup-show last sync time"
+  "backup-see list of files to be changed"
 ]
