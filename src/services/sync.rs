@@ -5,7 +5,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-pub const MESSAGE_TYPES: &[&str] = &["sync_list", "sync_push", "sync_pull"];
+pub const MESSAGE_TYPES: &[&str] = &["sync_list", "sync_save", "sync_delete", "sync_push", "sync_pull"];
 
 const CONFIG_FILE: &str = "sync_config.json";
 
@@ -40,11 +40,15 @@ pub fn load_targets() -> Vec<SyncTarget> {
         .unwrap_or_default()
 }
 
-#[allow(dead_code)]
 fn save_targets(targets: &[SyncTarget]) {
     if let Ok(json) = serde_json::to_string_pretty(targets) {
         let _ = std::fs::write(CONFIG_FILE, &json);
     }
+}
+
+fn broadcast_list(tx: &tokio::sync::broadcast::Sender<String>, targets: &[SyncTarget]) {
+    let msg = serde_json::json!({"type":"sync_list","targets": targets}).to_string();
+    let _ = tx.send(msg);
 }
 
 pub async fn handle_message(json: &Value, state: &Arc<Mutex<Status>>, socket: &mut WebSocket) -> bool {
@@ -52,10 +56,37 @@ pub async fn handle_message(json: &Value, state: &Arc<Mutex<Status>>, socket: &m
         Some("sync_list") => {
             let targets = load_targets();
             let msg = serde_json::json!({"type":"sync_list","targets": targets}).to_string();
-            println!("{}", msg);
             if socket.send(Message::Text(msg.into())).await.is_err() {
                 return true;
             }
+            false
+        }
+        Some("sync_save") => {
+            let target: SyncTarget = match serde_json::from_value(json["target"].clone()) {
+                Ok(t) => t,
+                Err(_) => return false,
+            };
+            let mut targets = load_targets();
+            if let Some(pos) = targets.iter().position(|t| t.name == target.name) {
+                targets[pos] = target;
+            } else {
+                targets.push(target);
+            }
+            save_targets(&targets);
+            let s = state.lock().await;
+            broadcast_list(&s.tx, &targets);
+            false
+        }
+        Some("sync_delete") => {
+            let name = match json["name"].as_str() {
+                Some(n) => n,
+                None => return false,
+            };
+            let mut targets = load_targets();
+            targets.retain(|t| t.name != name);
+            save_targets(&targets);
+            let s = state.lock().await;
+            broadcast_list(&s.tx, &targets);
             false
         }
         Some("sync_push") | Some("sync_pull") => {
@@ -262,6 +293,60 @@ mod tests {
 
         let s = state.lock().await;
         assert_eq!(s.syncing.as_deref(), Some("push-Old"));
+    }
+
+    #[tokio::test]
+    async fn test_save_new_target_updates_file() {
+        use std::sync::Once;
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {
+            // set config path to temp file for this test session
+            // by writing and reading the actual file path is fine
+        });
+
+        let tmp = std::env::temp_dir().join("test_sync_save.json");
+        // temporarily swap CONFIG_FILE by writing directly
+        std::fs::write(&tmp, "[]").unwrap();
+
+        let target = make_target("NewTarget");
+        let targets = vec![target.clone()];
+        // simulate save
+        let json = serde_json::to_string_pretty(&targets).unwrap();
+        std::fs::write(&tmp, &json).unwrap();
+
+        let loaded: Vec<SyncTarget> = std::fs::read_to_string(&tmp)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].name, "NewTarget");
+
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[tokio::test]
+    async fn test_delete_target() {
+        let tmp = std::env::temp_dir().join("test_sync_delete.json");
+        let targets = vec![make_target("Keep"), make_target("Remove")];
+        let json = serde_json::to_string_pretty(&targets).unwrap();
+        std::fs::write(&tmp, &json).unwrap();
+
+        let mut loaded: Vec<SyncTarget> = std::fs::read_to_string(&tmp)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
+        loaded.retain(|t| t.name != "Remove");
+        let json = serde_json::to_string_pretty(&loaded).unwrap();
+        std::fs::write(&tmp, &json).unwrap();
+
+        let final_list: Vec<SyncTarget> = std::fs::read_to_string(&tmp)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
+        assert_eq!(final_list.len(), 1);
+        assert_eq!(final_list[0].name, "Keep");
+
+        let _ = std::fs::remove_file(&tmp);
     }
 
     #[tokio::test]

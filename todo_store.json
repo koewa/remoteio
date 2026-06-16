@@ -4,7 +4,12 @@
   "make multiple lists of todos",
   "add authentication",
   "support https",
-  "backup service",
   "make a chat application",
-  "recepten boekje"
+  "recepten boekje",
+  "backup service",
+  "backup-cancel sync",
+  "backup-show progress",
+  "backup-show status per active sync",
+  "backup-show if in sync",
+  "backup-show last sync time"
 ]

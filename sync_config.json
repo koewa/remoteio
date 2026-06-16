@@ -1,18 +1,5 @@
 [
   {
-    "name": "Main Laptop",
-    "local": {
-      "host": "",
-      "path": "/home/koewa/git/remoteio/huis/",
-      "user": ""
-    },
-    "remote": {
-      "host": "koewa-precision-5530.local",
-      "path": "~/Documents/huis/",
-      "user": "koewa"
-    }
-  },
-  {
     "name": "local",
     "local": {
       "host": "",
@@ -23,6 +10,45 @@
       "host": "",
       "path": "/home/koewa/Downloads/auto2",
       "user": ""
+    }
+  },
+  {
+    "name": "Old-laptop-huis-fotos",
+    "local": {
+      "host": "",
+      "path": "/home/koewa/git/remoteio/huis/Foto's thuis",
+      "user": ""
+    },
+    "remote": {
+      "host": "koewa-precision-5530.local",
+      "path": "~/Documents/huis/",
+      "user": "koewa"
+    }
+  },
+  {
+    "name": "Old-laptop-huis-bank",
+    "local": {
+      "host": "",
+      "path": "/home/koewa/git/remoteio/huis/bank",
+      "user": ""
+    },
+    "remote": {
+      "host": "koewa-precision-5530.local",
+      "path": "~/Documents/huis/",
+      "user": "koewa"
+    }
+  },
+  {
+    "name": "Old-laptop-huis-architect",
+    "local": {
+      "host": "",
+      "path": "/home/koewa/git/remoteio/huis/Architect",
+      "user": ""
+    },
+    "remote": {
+      "host": "koewa-precision-5530.local",
+      "path": "~/Documents/huis/",
+      "user": "koewa"
     }
   }
 ]
