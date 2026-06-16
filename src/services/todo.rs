@@ -16,7 +16,7 @@ pub fn load_todos() -> Vec<String> {
 }
 
 fn save_todos(todos: &[String]) {
-    if let Ok(json) = serde_json::to_string(todos) {
+    if let Ok(json) = serde_json::to_string_pretty(todos) {
         let _ = fs::write(TODO_FILE, &json);
     }
 }

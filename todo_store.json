@@ -1,1 +1,11 @@
-["remove echo features in the server","add a logo for the webpage","add unit tests","be able to edit todos","make multiple lists of todos","add authentication","support https","backup service","make a chat application"]
+[
+  "remove echo features in the server",
+  "add a logo for the webpage",
+  "add unit tests",
+  "be able to edit todos",
+  "make multiple lists of todos",
+  "add authentication",
+  "support https",
+  "backup service",
+  "make a chat application"
+]
