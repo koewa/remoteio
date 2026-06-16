@@ -12,7 +12,7 @@ use tokio::net::TcpListener;
 use tokio::sync::broadcast::channel;
 use tokio::sync::Mutex;
 use tokio::sync::Notify;
-use tower_http::services::ServeFile;
+use tower_http::services::ServeDir;
 use clap::Parser;
 
 mod services;
@@ -102,9 +102,9 @@ async fn main() {
     println!("started server on http://{}", addr);
 
     let router = Router::new()
-        .route("/", get_service(ServeFile::new("src/ui/index.html")))
         .route("/api", get(root_handler))
         .route("/ws", get(websocket_handler))
+        .fallback(get_service(ServeDir::new("src/ui")))
         .with_state(state);
 
     axum::serve(listener, router.into_make_service())
