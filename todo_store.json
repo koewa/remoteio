@@ -1,8 +1,8 @@
 [
   "Add REST api",
-  "add a logo for the webpage",
-  "add unit tests",
+  "add a icon for the webpage",
   "make multiple lists of todos",
+  "add unit tests",
   "add authentication",
   "support https",
   "backup service",

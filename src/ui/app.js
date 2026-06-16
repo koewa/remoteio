@@ -3,7 +3,6 @@ import * as todoService from './todo/todo.js';
 import * as serverService from './server/server.js';
 
 const statusEl = document.getElementById("status");
-const connectingEl = document.getElementById("connecting");
 
 let socket;
 
@@ -19,13 +18,18 @@ export function esc(s) {
     return d.innerHTML;
 }
 
+async function loadPanel(id, url) {
+    const resp = await fetch(url);
+    document.getElementById(id).innerHTML = await resp.text();
+}
+
 function connect() {
     socket = new WebSocket("ws://" + window.location.host + "/ws");
 
     socket.onopen = () => {
         statusEl.textContent = "status: connected";
-        connectingEl.style.display = "none";
         serverService.onConnect();
+        processService.onConnect();
         send({type: "todo_list"});
     };
 
@@ -47,8 +51,6 @@ function connect() {
 
     socket.onclose = () => {
         statusEl.textContent = "status: disconnected";
-        connectingEl.textContent = "Reconnecting in 3 seconds...";
-        connectingEl.style.display = "block";
         serverService.onDisconnect();
         processService.onDisconnect();
         setTimeout(connect, 3000);
@@ -59,7 +61,25 @@ function connect() {
     };
 }
 
-processService.init();
-todoService.init();
-serverService.init();
-connect();
+async function init() {
+    await Promise.all([
+        loadPanel("panel-processes", "/process/process.html"),
+        loadPanel("panel-todo", "/todo/todo.html"),
+    ]);
+
+    document.querySelectorAll(".tab").forEach(tab => {
+        tab.addEventListener("click", () => {
+            document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+            document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+            tab.classList.add("active");
+            document.getElementById("panel-" + tab.dataset.tab).classList.add("active");
+        });
+    });
+
+    processService.init();
+    todoService.init();
+    serverService.init();
+    connect();
+}
+
+init();

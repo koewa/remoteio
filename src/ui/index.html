@@ -22,48 +22,9 @@
         <button class="tab" data-tab="todo">Todo</button>
     </div>
 
-    <div id="panel-processes" class="panel active">
-        <div class="search" style="margin-bottom:12px;">
-            <input type="text" id="filter" placeholder="Filter by name, pid, or user..."
-                   style="width:100%;max-width:320px;padding:6px 12px;background:#161b22;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:0.85rem;outline:none;">
-        </div>
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th data-col="pid">PID</th>
-                        <th data-col="name">Name</th>
-                        <th data-col="state">State</th>
-                        <th data-col="uid">User</th>
-                        <th data-col="rss" class="rss">RSS</th>
-                        <th data-col="cpu" class="cpu">CPU Time</th>
-                        <th data-col="cmdline">Command</th>
-                    </tr>
-                </thead>
-                <tbody id="tbody"></tbody>
-            </table>
-        </div>
-        <div id="connecting" class="connecting">Connecting to server...</div>
-    </div>
-
-    <div id="panel-todo" class="panel">
-        <div class="todo-input">
-            <input type="text" id="todoInput" placeholder="Add a task..." maxlength="200">
-            <button id="todoAddBtn">Add</button>
-        </div>
-        <ul id="todoList" class="todo-list"></ul>
-    </div>
+    <div id="panel-processes" class="panel active"></div>
+    <div id="panel-todo" class="panel"></div>
 
     <script type="module" src="/app.js"></script>
-    <script>
-        document.querySelectorAll(".tab").forEach(tab => {
-            tab.addEventListener("click", () => {
-                document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-                document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
-                tab.classList.add("active");
-                document.getElementById("panel-" + tab.dataset.tab).classList.add("active");
-            });
-        });
-    </script>
 </body>
 </html>

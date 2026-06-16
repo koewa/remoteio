@@ -1,9 +1,6 @@
 import { esc } from '../app.js';
 
-const tbody = document.getElementById("tbody");
-const countEl = document.getElementById("count");
-const filterInput = document.getElementById("filter");
-
+let tbody, countEl, filterInput, connectingEl;
 let processes = [];
 let sortCol = "pid";
 let sortDir = 1;
@@ -70,12 +67,23 @@ export function onMessage(data) {
     render();
 }
 
+export function onConnect() {
+    connectingEl.style.display = "none";
+}
+
 export function onDisconnect() {
     processes = [];
     render();
+    connectingEl.textContent = "Reconnecting in 3 seconds...";
+    connectingEl.style.display = "block";
 }
 
 export function init() {
+    tbody = document.getElementById("tbody");
+    countEl = document.getElementById("count");
+    filterInput = document.getElementById("filter");
+    connectingEl = document.getElementById("connecting");
+
     document.querySelectorAll("th[data-col]").forEach(th => {
         th.addEventListener("click", () => {
             const col = th.dataset.col;
