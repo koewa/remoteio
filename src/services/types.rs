@@ -13,4 +13,5 @@ pub struct Status {
     pub tx: Sender<String>,
     pub shutdown: Arc<Notify>,
     pub todos: Vec<String>,
+    pub syncing: Option<String>,
 }

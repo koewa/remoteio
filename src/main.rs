@@ -91,6 +91,7 @@ async fn main() {
         tx: tx.clone(),
         shutdown: shutdown.clone(),
         todos: services::load_todos(),
+        syncing: None,
     }));
 
     services::setup_process_monitor(tx.clone());
@@ -129,6 +130,7 @@ mod integration {
             tx: tx.clone(),
             shutdown: shutdown.clone(),
             todos: vec!["test todo".to_string()],
+            syncing: None,
         }));
         services::setup_process_monitor(tx.clone());
 

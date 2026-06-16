@@ -4,6 +4,7 @@ export const processes = writable([]);
 export const todos = writable([]);
 export const connected = writable(false);
 export const shuttingDown = writable(false);
+export const syncState = writable({ syncing: false, direction: null, lastResult: null });
 
 let socket;
 
@@ -33,6 +34,10 @@ export function connect() {
         processes.set(data);
       } else if (data.type === 'todo_list') {
         todos.set(data.items || []);
+      } else if (data.type === 'sync_status') {
+        syncState.set({ syncing: true, direction: data.direction, lastResult: null });
+      } else if (data.type === 'sync_result') {
+        syncState.set({ syncing: false, direction: null, lastResult: { direction: data.direction, status: data.status, summary: data.summary || data.message, timestamp: new Date().toLocaleString() } });
       }
     } catch (_) {}
   };

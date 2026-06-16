@@ -4,6 +4,7 @@
   import Server from './server/Server.svelte';
   import Process from './process/Process.svelte';
   import Todo from './todo/Todo.svelte';
+  import Sync from './sync/Sync.svelte';
 
   let activeTab = 'processes';
   let statusEl;
@@ -34,6 +35,8 @@
     onclick={() => activeTab = 'processes'}>Processes</button>
   <button class="tab" class:active={activeTab === 'todo'}
     onclick={() => activeTab = 'todo'}>Todo</button>
+  <button class="tab" class:active={activeTab === 'sync'}
+    onclick={() => activeTab = 'sync'}>Sync</button>
 </div>
 
 <div id="panel-processes" class="panel" class:active={activeTab === 'processes'}>
@@ -42,6 +45,10 @@
 
 <div id="panel-todo" class="panel" class:active={activeTab === 'todo'}>
   <Todo />
+</div>
+
+<div id="panel-sync" class="panel" class:active={activeTab === 'sync'}>
+  <Sync />
 </div>
 
 <style>

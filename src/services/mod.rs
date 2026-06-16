@@ -1,6 +1,7 @@
 pub mod types;
 pub mod process;
 pub mod server;
+pub mod sync;
 pub mod todo;
 
 pub use process::setup_process_monitor;
@@ -18,6 +19,9 @@ pub async fn dispatch(
     state: &Arc<Mutex<Status>>,
     socket: &mut WebSocket,
 ) -> bool {
+    if sync::MESSAGE_TYPES.contains(&type_str) {
+        return sync::handle_message(json, state, socket).await;
+    }
     if server::MESSAGE_TYPES.contains(&type_str) {
         let mut s = state.lock().await;
         return server::handle_message(json, &mut s, socket).await;
