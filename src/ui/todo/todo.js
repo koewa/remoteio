@@ -1,4 +1,4 @@
-import { esc, send } from './app.js';
+import { esc, send } from '../app.js';
 
 const todoInput = document.getElementById("todoInput");
 const todoAddBtn = document.getElementById("todoAddBtn");

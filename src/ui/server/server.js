@@ -1,4 +1,4 @@
-import { send } from './app.js';
+import { send } from '../app.js';
 
 const shutdownBtn = document.getElementById("shutdownBtn");
 

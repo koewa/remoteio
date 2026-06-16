@@ -1,4 +1,4 @@
-import { esc } from './app.js';
+import { esc } from '../app.js';
 
 const tbody = document.getElementById("tbody");
 const countEl = document.getElementById("count");

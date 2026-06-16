@@ -1,6 +1,6 @@
-import * as processService from './process.js';
-import * as todoService from './todo.js';
-import * as serverService from './server.js';
+import * as processService from './process/process.js';
+import * as todoService from './todo/todo.js';
+import * as serverService from './server/server.js';
 
 const statusEl = document.getElementById("status");
 const connectingEl = document.getElementById("connecting");
