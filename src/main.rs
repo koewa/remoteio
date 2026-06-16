@@ -104,7 +104,7 @@ async fn main() {
     let router = Router::new()
         .route("/api", get(root_handler))
         .route("/ws", get(websocket_handler))
-        .fallback(get_service(ServeDir::new("src/ui")))
+        .fallback(get_service(ServeDir::new("client/dist")))
         .with_state(state);
 
     axum::serve(listener, router.into_make_service())
