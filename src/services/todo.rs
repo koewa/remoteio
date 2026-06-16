@@ -6,7 +6,7 @@ use tokio::sync::broadcast::Sender;
 
 const TODO_FILE: &str = "todo_store.json";
 
-pub const MESSAGE_TYPES: &[&str] = &["todo_list", "todo_add", "todo_remove"];
+pub const MESSAGE_TYPES: &[&str] = &["todo_list", "todo_add", "todo_remove", "todo_reorder"];
 
 pub fn load_todos() -> Vec<String> {
     fs::read_to_string(TODO_FILE)
@@ -40,6 +40,15 @@ fn handle_remove(todos: &mut Vec<String>, id: usize, tx: &Sender<String>) {
     }
 }
 
+fn handle_reorder(todos: &mut Vec<String>, from: usize, to: usize, tx: &Sender<String>) {
+    if from < todos.len() && to < todos.len() {
+        let item = todos.remove(from);
+        todos.insert(to, item);
+        save_todos(todos);
+        broadcast_list(todos, tx);
+    }
+}
+
 fn get_list_msg(todos: &[String]) -> String {
     serde_json::json!({"type":"todo_list","items": todos}).to_string()
 }
@@ -59,6 +68,12 @@ pub async fn handle_message(json: &Value, state: &mut Status, socket: &mut WebSo
         Some("todo_remove") => {
             if let Some(id) = json["id"].as_u64() {
                 handle_remove(&mut state.todos, id as usize, &state.tx);
+            }
+            false
+        }
+        Some("todo_reorder") => {
+            if let (Some(from), Some(to)) = (json["from"].as_u64(), json["to"].as_u64()) {
+                handle_reorder(&mut state.todos, from as usize, to as usize, &state.tx);
             }
             false
         }
