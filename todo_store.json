@@ -1,6 +1,5 @@
 [
   "Add REST api",
-  "add an icon for the webpage",
   "make multiple lists of todos",
   "add authentication",
   "support https",
@@ -10,5 +9,6 @@
   "backup-show progress",
   "backup-show if the target is already in sync",
   "backup-be able to select only parts of the files to be synced",
-  "backup-show the preview as a hierarchical view (expandable, indicating the amount of children)"
+  "backup-show the preview as a hierarchical view (expandable, indicating the amount of children)",
+  "server-be able to shutdown servers/laptops"
 ]
