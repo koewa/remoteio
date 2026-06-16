@@ -10,7 +10,6 @@ pub enum ServerState {
 
 pub struct Status {
     pub state: ServerState,
-    pub nbr_of_calls: u32,
     pub tx: Sender<String>,
     pub shutdown: Arc<Notify>,
     pub todos: Vec<String>,

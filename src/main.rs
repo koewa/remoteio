@@ -26,14 +26,6 @@ async fn websocket_handler(
 }
 
 async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
-    if let Err(e) = socket
-        .send(Message::Text("Hello from the server!".into()))
-        .await
-    {
-        eprintln!("Error sending message: {}", e);
-        return;
-    }
-
     state.lock().await.state = ServerState::Connected;
     let mut rx = state.lock().await.tx.subscribe();
 
@@ -49,14 +41,6 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
                                     break;
                                 }
                             }
-                        } else {
-                            {
-                                let mut state_locked = state.lock().await;
-                                state_locked.nbr_of_calls += 1;
-                            }
-                            if socket.send(Message::Text(format!("Echo: {}", msg).into())).await.is_err() {
-                                break;
-                            }
                         }
                     }
                     Message::Close(_) => {
@@ -67,6 +51,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
                     _ => {}
                 }
             }
+            // forward the internal channel to the websocket
             Ok(msg) = rx.recv() => {
                 if socket.send(Message::Text(msg.into())).await.is_err() {
                     break;
@@ -79,8 +64,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
 async fn root_handler(State(state): State<Arc<Mutex<Status>>>) -> String {
     let state_locked = state.lock().await;
     format!(
-        "Number of calls: {} \n state: {:?} \n todos: {}",
-        state_locked.nbr_of_calls,
+        "state: {:?} \n todos: {}",
         state_locked.state,
         state_locked.todos.len(),
     )
@@ -103,7 +87,6 @@ async fn main() {
     let (tx, _) = channel::<String>(64);
     let shutdown = Arc::new(Notify::new());
     let state = Arc::new(Mutex::new(Status {
-        nbr_of_calls: 0,
         state: ServerState::Disconnected,
         tx: tx.clone(),
         shutdown: shutdown.clone(),

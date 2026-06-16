@@ -1,5 +1,5 @@
 [
-  "remove echo features in the server",
+  "Add REST api",
   "add a logo for the webpage",
   "add unit tests",
   "be able to edit todos",
