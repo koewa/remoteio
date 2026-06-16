@@ -31,6 +31,8 @@ export function connect() {
   socket.onopen = () => {
     connected.set(true);
     flushPending();
+    send({ type: 'todo_list' });
+    send({ type: 'sync_list' });
   };
 
   socket.onmessage = (event) => {
