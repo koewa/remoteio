@@ -1,0 +1,27 @@
+.table-wrap { overflow-x: auto; }
+table {
+    width: 100%; border-collapse: collapse; font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+}
+th {
+    position: sticky; top: 0; background: #161b22; text-align: left;
+    padding: 8px 10px; border-bottom: 2px solid #30363d;
+    color: #8b949e; font-weight: 600; cursor: pointer; user-select: none;
+}
+th:hover { color: #58a6ff; }
+th.sorted { color: #58a6ff; }
+td { padding: 4px 10px; border-bottom: 1px solid #21262d; white-space: nowrap; }
+tr:hover td { background: #161b22; }
+.pid { color: #58a6ff; font-weight: 600; }
+.state {
+    display: inline-block; padding: 1px 6px; border-radius: 4px;
+    font-size: 0.75rem; font-weight: 600;
+}
+.state-R { background: #1f6f2b; color: #7ee787; }
+.state-S { background: #1f6f2b44; color: #7ee787; }
+.state-D { background: #9e6a0344; color: #d29922; }
+.state-Z { background: #da363344; color: #ff7b72; }
+.state-T { background: #8b949e44; color: #8b949e; }
+.cmdline { max-width: 400px; overflow: hidden; text-overflow: ellipsis; }
+.rss { text-align: right; }
+.cpu { text-align: right; }

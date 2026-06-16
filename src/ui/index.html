@@ -4,103 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RemoteIO</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0d1117; color: #c9d1d9; padding: 20px;
-        }
-        h1 { font-size: 1.5rem; margin-bottom: 16px; color: #58a6ff; }
-        .meta { display: flex; gap: 16px; margin-bottom: 12px; font-size: 0.85rem; color: #8b949e; align-items: center; }
-        .meta span { background: #161b22; padding: 4px 10px; border-radius: 6px; }
-        .shutdown-btn {
-            margin-left: auto; padding: 4px 14px; font-size: 0.8rem;
-            background: #da3633; color: #fff; border: none; border-radius: 6px;
-            cursor: pointer; font-weight: 600;
-        }
-        .shutdown-btn:hover { background: #f85149; }
-        .shutdown-btn:disabled { background: #484f58; cursor: default; }
-
-        .tabs { display: flex; gap: 0; margin-bottom: 16px; border-bottom: 1px solid #30363d; }
-        .tab {
-            padding: 8px 20px; cursor: pointer; font-size: 0.9rem; font-weight: 600;
-            color: #8b949e; border-bottom: 2px solid transparent; background: none; border-top: none;
-            border-left: none; border-right: none; transition: 0.15s;
-        }
-        .tab:hover { color: #c9d1d9; }
-        .tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
-        .panel { display: none; }
-        .panel.active { display: block; }
-
-        .table-wrap { overflow-x: auto; }
-        table {
-            width: 100%; border-collapse: collapse; font-size: 0.8rem;
-            font-variant-numeric: tabular-nums;
-        }
-        th {
-            position: sticky; top: 0; background: #161b22; text-align: left;
-            padding: 8px 10px; border-bottom: 2px solid #30363d;
-            color: #8b949e; font-weight: 600; cursor: pointer; user-select: none;
-        }
-        th:hover { color: #58a6ff; }
-        th.sorted { color: #58a6ff; }
-        td { padding: 4px 10px; border-bottom: 1px solid #21262d; white-space: nowrap; }
-        tr:hover td { background: #161b22; }
-        .pid { color: #58a6ff; font-weight: 600; }
-        .state {
-            display: inline-block; padding: 1px 6px; border-radius: 4px;
-            font-size: 0.75rem; font-weight: 600;
-        }
-        .state-R { background: #1f6f2b; color: #7ee787; }
-        .state-S { background: #1f6f2b44; color: #7ee787; }
-        .state-D { background: #9e6a0344; color: #d29922; }
-        .state-Z { background: #da363344; color: #ff7b72; }
-        .state-T { background: #8b949e44; color: #8b949e; }
-        .cmdline { max-width: 400px; overflow: hidden; text-overflow: ellipsis; }
-        .rss { text-align: right; }
-        .cpu { text-align: right; }
-
-        .todo-input { display: flex; gap: 8px; margin-bottom: 16px; }
-        .todo-input input {
-            flex: 1; max-width: 400px; padding: 8px 12px;
-            background: #161b22; border: 1px solid #30363d; border-radius: 6px;
-            color: #c9d1d9; font-size: 0.9rem; outline: none;
-        }
-        .todo-input input:focus { border-color: #58a6ff; }
-        .todo-input button {
-            padding: 8px 18px; font-size: 0.85rem; font-weight: 600;
-            background: #238636; color: #fff; border: none; border-radius: 6px; cursor: pointer;
-        }
-        .todo-input button:hover { background: #2ea043; }
-
-        .todo-list { list-style: none; max-width: 500px; }
-        .todo-item {
-            display: flex; align-items: center; gap: 10px;
-            padding: 10px 12px; border-bottom: 1px solid #21262d;
-        }
-        .todo-item:hover { background: #161b22; border-radius: 6px; }
-        .todo-item.dragging { opacity: 0.4; }
-        .todo-item.drag-over { border-top: 2px solid #58a6ff; }
-        .todo-text { flex: 1; font-size: 0.9rem; }
-        .todo-remove {
-            padding: 2px 8px; font-size: 0.8rem;
-            background: transparent; color: #da3633; border: 1px solid #da3633;
-            border-radius: 4px; cursor: pointer; font-weight: 600;
-        }
-        .todo-remove:hover { background: #da3633; color: #fff; }
-        .todo-edit-input {
-            flex: 1; padding: 4px 8px; font-size: 0.9rem; font-family: inherit;
-            background: #0d1117; border: 1px solid #58a6ff; border-radius: 4px;
-            color: #c9d1d9; outline: none;
-        }
-        .todo-empty { color: #8b949e; font-size: 0.9rem; padding: 20px 0; }
-        .connecting { color: #8b949e; padding: 20px; text-align: center; }
-
-        @media (max-width: 600px) {
-            .cmdline { max-width: 120px; }
-            th, td { padding: 4px 6px; }
-        }
-    </style>
+    <link rel="stylesheet" href="/base.css">
+    <link rel="stylesheet" href="/server.css">
+    <link rel="stylesheet" href="/process.css">
+    <link rel="stylesheet" href="/todo.css">
 </head>
 <body>
     <h1>RemoteIO</h1>
