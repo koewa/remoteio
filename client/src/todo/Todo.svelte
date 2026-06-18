@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { todos, todoListNames, todoActiveList, send } from '../lib/ws.js';
+  import { todos, todoLists, todoListNames, todoActiveList, send } from '../lib/ws.js';
 
   let newText = '';
   let dragFrom = null;
@@ -18,7 +18,7 @@
   function add() {
     const text = newText.trim();
     if (text) {
-      send({ type: 'todo_add', text });
+      send({ type: 'todo_add', text, list: $todoActiveList });
       newText = '';
     }
   }
@@ -28,7 +28,7 @@
   }
 
   function remove(id) {
-    send({ type: 'todo_remove', id });
+    send({ type: 'todo_remove', id, list: $todoActiveList });
   }
 
   function dragstart(e, id) {
@@ -59,7 +59,7 @@
     e.preventDefault();
     e.currentTarget.classList.remove('drag-over');
     if (dragFrom !== null && dragFrom !== to) {
-      send({ type: 'todo_reorder', from: dragFrom, to });
+      send({ type: 'todo_reorder', from: dragFrom, to, list: $todoActiveList });
     }
     dragFrom = null;
   }
@@ -79,7 +79,7 @@
     function finish() {
       const text = input.value.trim();
       if (text && text !== original) {
-        send({ type: 'todo_edit', id, text });
+        send({ type: 'todo_edit', id, text, list: $todoActiveList });
       }
     }
 
@@ -91,7 +91,7 @@
   }
 
   function setList(name) {
-    send({ type: 'todo_set_list', list: name });
+    todoActiveList.set(name);
   }
 
   function createList() {
@@ -115,7 +115,7 @@
   }
 
   function moveTo(id, targetList) {
-    send({ type: 'todo_move', id, to: targetList });
+    send({ type: 'todo_move', id, to: targetList, list: $todoActiveList });
   }
 
   function otherLists() {

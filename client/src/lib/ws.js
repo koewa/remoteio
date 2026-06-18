@@ -1,7 +1,7 @@
-import { writable } from 'svelte/store';
+import { writable, derived } from 'svelte/store';
 
 export const processes = writable([]);
-export const todos = writable([]);
+export const todoLists = writable({});
 export const todoListNames = writable([]);
 export const todoActiveList = writable('default');
 export const connected = writable(false);
@@ -9,6 +9,10 @@ export const shuttingDown = writable(false);
 export const syncStates = writable({});
 export const syncPreviews = writable({});
 export const syncTargets = writable([]);
+
+export const todos = derived([todoLists, todoActiveList], ([$todoLists, $todoActiveList]) => {
+  return $todoLists[$todoActiveList] || [];
+});
 
 let socket;
 let pending = [];
@@ -49,9 +53,8 @@ export function connect() {
       if (Array.isArray(data)) {
         processes.set(data);
       } else if (data.type === 'todo_list') {
-        todos.set(data.items || []);
+        todoLists.set(data.lists || {});
         todoListNames.set(data.listNames || []);
-        todoActiveList.set(data.active || 'default');
       } else if (data.type === 'sync_list') {
         syncTargets.set(data.targets || []);
       } else if (data.type === 'sync_status') {

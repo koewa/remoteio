@@ -305,7 +305,6 @@ mod tests {
             tx,
             shutdown: Arc::new(Notify::new()),
             todo_lists: HashMap::new(),
-            todo_active: "default".to_string(),
             syncing: HashSet::new(),
         }));
 
@@ -338,7 +337,6 @@ mod tests {
             tx,
             shutdown: Arc::new(Notify::new()),
             todo_lists: HashMap::new(),
-            todo_active: "default".to_string(),
             syncing: HashSet::new(),
         }));
 
@@ -365,7 +363,6 @@ mod tests {
             tx,
             shutdown: Arc::new(Notify::new()),
             todo_lists: HashMap::new(),
-            todo_active: "default".to_string(),
             syncing: HashSet::new(),
         }));
 
@@ -385,7 +382,6 @@ mod tests {
             tx,
             shutdown: Arc::new(Notify::new()),
             todo_lists: HashMap::new(),
-            todo_active: "default".to_string(),
             syncing: HashSet::from(["Old".to_string()]),
         }));
 
@@ -407,7 +403,6 @@ mod tests {
             tx,
             shutdown: Arc::new(Notify::new()),
             todo_lists: HashMap::new(),
-            todo_active: "default".to_string(),
             syncing: HashSet::from(["Existing".to_string()]),
         }));
 

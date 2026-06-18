@@ -15,6 +15,5 @@ pub struct Status {
     pub tx: Sender<String>,
     pub shutdown: Arc<Notify>,
     pub todo_lists: HashMap<String, Vec<String>>,
-    pub todo_active: String,
     pub syncing: HashSet<String>,
 }

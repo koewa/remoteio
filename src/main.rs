@@ -93,7 +93,6 @@ async fn main() {
         tx: tx.clone(),
         shutdown: shutdown.clone(),
         todo_lists: services::load_todos(),
-        todo_active: "default".to_string(),
         syncing: HashSet::new(),
     }));
 
@@ -134,7 +133,6 @@ mod integration {
             tx: tx.clone(),
             shutdown: shutdown.clone(),
             todo_lists: HashMap::from([("default".to_string(), vec!["test todo".to_string()])]),
-            todo_active: "default".to_string(),
             syncing: HashSet::new(),
         }));
         services::setup_process_monitor(tx.clone());
@@ -192,7 +190,7 @@ mod integration {
         let msg = read.next().await.unwrap().unwrap();
         let v: serde_json::Value = serde_json::from_str(msg.to_text().unwrap()).unwrap();
         assert_eq!(v["type"], "todo_list");
-        assert_eq!(v["items"][0], "test todo");
+        assert_eq!(v["lists"]["default"][0], "test todo");
     }
 
     #[tokio::test]
@@ -220,8 +218,8 @@ mod integration {
         let broadcast = read.next().await.unwrap().unwrap();
         let v: serde_json::Value = serde_json::from_str(broadcast.to_text().unwrap()).unwrap();
         assert_eq!(v["type"], "todo_list");
-        assert_eq!(v["items"].as_array().unwrap().len(), 2);
-        assert_eq!(v["items"][1], "added via ws");
+        assert_eq!(v["lists"]["default"].as_array().unwrap().len(), 2);
+        assert_eq!(v["lists"]["default"][1], "added via ws");
     }
 
     #[tokio::test]
@@ -253,7 +251,7 @@ mod integration {
         let broadcast = read.next().await.unwrap().unwrap();
         let v: serde_json::Value = serde_json::from_str(broadcast.to_text().unwrap()).unwrap();
         assert_eq!(v["type"], "todo_list");
-        let items = v["items"].as_array().unwrap();
+        let items = v["lists"]["default"].as_array().unwrap();
         assert_eq!(items.len(), 2);
         assert_eq!(items[0], "first");
         assert_eq!(items[1], "second");
@@ -288,8 +286,8 @@ mod integration {
         let broadcast = read.next().await.unwrap().unwrap();
         let v: serde_json::Value = serde_json::from_str(broadcast.to_text().unwrap()).unwrap();
         assert_eq!(v["type"], "todo_list");
-        assert_eq!(v["items"][1], "second");
-        assert_eq!(v["items"][2], "first");
+        assert_eq!(v["lists"]["default"][1], "second");
+        assert_eq!(v["lists"]["default"][2], "first");
 
         // edit index 1 ("second") to "edited"
         write.send(tokio_tungstenite::tungstenite::Message::Text(
@@ -299,7 +297,7 @@ mod integration {
         let broadcast = read.next().await.unwrap().unwrap();
         let v: serde_json::Value = serde_json::from_str(broadcast.to_text().unwrap()).unwrap();
         assert_eq!(v["type"], "todo_list");
-        assert_eq!(v["items"][1], "edited");
+        assert_eq!(v["lists"]["default"][1], "edited");
     }
 
     #[tokio::test]
@@ -334,7 +332,7 @@ mod integration {
             let msg = read.next().await.unwrap().unwrap();
             let v: serde_json::Value = serde_json::from_str(msg.to_text().unwrap()).unwrap();
             assert_eq!(v["type"], "todo_list");
-            let items: Vec<String> = v["items"]
+            let items: Vec<String> = v["lists"]["default"]
                 .as_array().unwrap()
                 .iter().map(|x| x.as_str().unwrap().to_string())
                 .collect();

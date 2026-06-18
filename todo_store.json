@@ -1,9 +1,4 @@
 {
-  "server-features": [
-    "backup/server: show disks and disk space",
-    "server-be able to shutdown servers/laptops",
-    "servers-show upgrade state"
-  ],
   "new-ideas": [
     "recepten boekje",
     "make a chat application"
@@ -15,9 +10,21 @@
     "backup-show the preview as a hierarchical view (expandable, indicating the amount of children)",
     "backup-be able to select only parts of the files to be synced"
   ],
+  "server-features": [
+    "backup/server: show disks and disk space",
+    "server-be able to shutdown servers/laptops",
+    "servers-show upgrade state",
+    "start server publicly or locally or both"
+  ],
   "general-improvements": [
     "Add REST api",
     "add authentication",
-    "support https"
+    "support https",
+    "provide a url for each tab"
+  ],
+  "todo-features": [
+    "move items by dragging",
+    "reorder lists",
+    "be able to show multiple lists at the same time (when enough room)"
   ]
 }

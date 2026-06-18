@@ -8,7 +8,7 @@ const TODO_FILE: &str = "todo_store.json";
 
 pub const MESSAGE_TYPES: &[&str] = &[
     "todo_list", "todo_add", "todo_remove", "todo_reorder", "todo_edit", "todo_move",
-    "todo_list_create", "todo_list_delete", "todo_list_rename", "todo_set_list",
+    "todo_list_create", "todo_list_delete", "todo_list_rename",
 ];
 
 pub fn load_todos() -> HashMap<String, Vec<String>> {
@@ -40,32 +40,28 @@ fn save_todos(lists: &HashMap<String, Vec<String>>) {
     }
 }
 
-fn broadcast_list(lists: &HashMap<String, Vec<String>>, active: &str, tx: &tokio::sync::broadcast::Sender<String>) {
-    let items = lists.get(active).cloned().unwrap_or_default();
+fn broadcast_lists(lists: &HashMap<String, Vec<String>>, tx: &tokio::sync::broadcast::Sender<String>) {
     let list_names: Vec<&String> = lists.keys().collect();
     let msg = serde_json::json!({
         "type": "todo_list",
-        "items": items,
+        "lists": lists,
         "listNames": list_names,
-        "active": active,
     }).to_string();
     let _ = tx.send(msg);
 }
 
-fn list_name(json: &Value, state: &Status) -> String {
-    json["list"].as_str().map(|s| s.to_string()).unwrap_or_else(|| state.todo_active.clone())
+fn list_name(json: &Value) -> String {
+    json["list"].as_str().map(|s| s.to_string()).unwrap_or_else(|| "default".to_string())
 }
 
 pub async fn handle_message(json: &Value, state: &mut Status, socket: &mut WebSocket) -> bool {
     match json["type"].as_str() {
         Some("todo_list") => {
-            let items = state.todo_lists.get(&state.todo_active).cloned().unwrap_or_default();
             let list_names: Vec<&String> = state.todo_lists.keys().collect();
             let msg = serde_json::json!({
                 "type": "todo_list",
-                "items": items,
+                "lists": &state.todo_lists,
                 "listNames": list_names,
-                "active": state.todo_active,
             }).to_string();
             if socket.send(Message::Text(msg.into())).await.is_err() {
                 return true;
@@ -74,21 +70,21 @@ pub async fn handle_message(json: &Value, state: &mut Status, socket: &mut WebSo
         }
         Some("todo_add") => {
             if let Some(text) = json["text"].as_str() {
-                let list = list_name(json, state);
+                let list = list_name(json);
                 state.todo_lists.entry(list).or_default().push(text.to_string());
                 save_todos(&state.todo_lists);
-                broadcast_list(&state.todo_lists, &state.todo_active, &state.tx);
+                broadcast_lists(&state.todo_lists, &state.tx);
             }
             false
         }
         Some("todo_remove") => {
             if let Some(id) = json["id"].as_u64() {
-                let list = list_name(json, state);
+                let list = list_name(json);
                 if let Some(items) = state.todo_lists.get_mut(&list) {
                     if (id as usize) < items.len() {
                         items.remove(id as usize);
                         save_todos(&state.todo_lists);
-                        broadcast_list(&state.todo_lists, &state.todo_active, &state.tx);
+                        broadcast_lists(&state.todo_lists, &state.tx);
                     }
                 }
             }
@@ -96,13 +92,13 @@ pub async fn handle_message(json: &Value, state: &mut Status, socket: &mut WebSo
         }
         Some("todo_reorder") => {
             if let (Some(from), Some(to)) = (json["from"].as_u64(), json["to"].as_u64()) {
-                let list = list_name(json, state);
+                let list = list_name(json);
                 if let Some(items) = state.todo_lists.get_mut(&list) {
                     if from < items.len() as u64 && to < items.len() as u64 {
                         let item = items.remove(from as usize);
                         items.insert(to as usize, item);
                         save_todos(&state.todo_lists);
-                        broadcast_list(&state.todo_lists, &state.todo_active, &state.tx);
+                        broadcast_lists(&state.todo_lists, &state.tx);
                     }
                 }
             }
@@ -110,12 +106,12 @@ pub async fn handle_message(json: &Value, state: &mut Status, socket: &mut WebSo
         }
         Some("todo_edit") => {
             if let (Some(id), Some(text)) = (json["id"].as_u64(), json["text"].as_str()) {
-                let list = list_name(json, state);
+                let list = list_name(json);
                 if let Some(items) = state.todo_lists.get_mut(&list) {
                     if (id as usize) < items.len() {
                         items[id as usize] = text.to_string();
                         save_todos(&state.todo_lists);
-                        broadcast_list(&state.todo_lists, &state.todo_active, &state.tx);
+                        broadcast_lists(&state.todo_lists, &state.tx);
                     }
                 }
             }
@@ -126,7 +122,7 @@ pub async fn handle_message(json: &Value, state: &mut Status, socket: &mut WebSo
                 if !state.todo_lists.contains_key(name) {
                     state.todo_lists.insert(name.to_string(), Vec::new());
                     save_todos(&state.todo_lists);
-                    broadcast_list(&state.todo_lists, &state.todo_active, &state.tx);
+                    broadcast_lists(&state.todo_lists, &state.tx);
                 }
             }
             false
@@ -135,11 +131,8 @@ pub async fn handle_message(json: &Value, state: &mut Status, socket: &mut WebSo
             if let Some(name) = json["name"].as_str() {
                 if state.todo_lists.len() > 1 {
                     state.todo_lists.remove(name);
-                    if !state.todo_lists.contains_key(&state.todo_active) {
-                        state.todo_active = state.todo_lists.keys().next().unwrap().clone();
-                    }
                     save_todos(&state.todo_lists);
-                    broadcast_list(&state.todo_lists, &state.todo_active, &state.tx);
+                    broadcast_lists(&state.todo_lists, &state.tx);
                 }
             }
             false
@@ -148,27 +141,15 @@ pub async fn handle_message(json: &Value, state: &mut Status, socket: &mut WebSo
             if let (Some(from), Some(to)) = (json["old"].as_str(), json["name"].as_str()) {
                 if let Some(items) = state.todo_lists.remove(from) {
                     state.todo_lists.insert(to.to_string(), items);
-                    if state.todo_active == from {
-                        state.todo_active = to.to_string();
-                    }
                     save_todos(&state.todo_lists);
-                    broadcast_list(&state.todo_lists, &state.todo_active, &state.tx);
-                }
-            }
-            false
-        }
-        Some("todo_set_list") => {
-            if let Some(name) = json["list"].as_str() {
-                if state.todo_lists.contains_key(name) {
-                    state.todo_active = name.to_string();
-                    broadcast_list(&state.todo_lists, &state.todo_active, &state.tx);
+                    broadcast_lists(&state.todo_lists, &state.tx);
                 }
             }
             false
         }
         Some("todo_move") => {
             if let Some(id) = json["id"].as_u64() {
-                let from = list_name(json, state);
+                let from = list_name(json);
                 if let Some(to) = json["to"].as_str() {
                     if to != from && state.todo_lists.contains_key(to) {
                         if let Some(items) = state.todo_lists.get_mut(&from) {
@@ -176,7 +157,7 @@ pub async fn handle_message(json: &Value, state: &mut Status, socket: &mut WebSo
                                 let item = items.remove(id as usize);
                                 state.todo_lists.get_mut(to).unwrap().push(item);
                                 save_todos(&state.todo_lists);
-                                broadcast_list(&state.todo_lists, &state.todo_active, &state.tx);
+                                broadcast_lists(&state.todo_lists, &state.tx);
                             }
                         }
                     }
@@ -205,7 +186,6 @@ mod tests {
             tx: channel::<String>(16).0,
             shutdown: Arc::new(Notify::new()),
             todo_lists,
-            todo_active: "default".to_string(),
             syncing: HashSet::new(),
         }
     }
@@ -226,10 +206,11 @@ mod tests {
         state.tx = tx;
         state.todo_lists.entry("default".to_string()).or_default().push("hello".to_string());
         save_todos(&state.todo_lists);
-        broadcast_list(&state.todo_lists, &state.todo_active, &state.tx);
+        broadcast_lists(&state.todo_lists, &state.tx);
         assert_eq!(state.todo_lists["default"].len(), 3);
         let broadcast = rx.try_recv().unwrap();
         assert!(broadcast.contains(r#""type":"todo_list""#));
+        assert!(broadcast.contains(r#""lists""#));
     }
 
     #[test]
@@ -240,7 +221,7 @@ mod tests {
         state.todo_lists.insert("work".to_string(), vec![]);
         state.todo_lists.get_mut("work").unwrap().push("task".to_string());
         save_todos(&state.todo_lists);
-        broadcast_list(&state.todo_lists, &state.todo_active, &state.tx);
+        broadcast_lists(&state.todo_lists, &state.tx);
         assert_eq!(state.todo_lists["work"].len(), 1);
         let broadcast = rx.try_recv().unwrap();
         assert!(broadcast.contains(r#""listNames""#));
@@ -260,7 +241,7 @@ mod tests {
     fn test_handle_remove_out_of_bounds() {
         let mut state = make_state();
         let json = serde_json::json!({"type":"todo_remove","id":5});
-        let list = json["list"].as_str().map(|s| s.to_string()).unwrap_or_else(|| state.todo_active.clone());
+        let list = list_name(&json);
         if let Some(items) = state.todo_lists.get_mut(&list) {
             if (json["id"].as_u64().unwrap() as usize) < items.len() {
                 items.remove(json["id"].as_u64().unwrap() as usize);
@@ -339,15 +320,5 @@ mod tests {
         assert!(!state.todo_lists.contains_key("default"));
         assert!(state.todo_lists.contains_key("renamed"));
         assert_eq!(state.todo_lists["renamed"].len(), 2);
-    }
-
-    #[test]
-    fn test_set_list() {
-        let mut state = make_state();
-        state.todo_lists.insert("work".to_string(), vec!["task".to_string()]);
-        state.todo_active = "work".to_string();
-        assert_eq!(state.todo_active, "work");
-        let items = state.todo_lists.get(&state.todo_active).unwrap();
-        assert_eq!(items[0], "task");
     }
 }
