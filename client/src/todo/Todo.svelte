@@ -35,11 +35,20 @@
     dragFrom = id;
     e.dataTransfer.setData('text/plain', id);
     e.target.classList.add('dragging');
+    // custom ghost image with transparency
+    const ghost = e.target.cloneNode(true);
+    ghost.style.opacity = '0.4';
+    ghost.style.position = 'absolute';
+    ghost.style.top = '-1000px';
+    ghost.style.pointerEvents = 'none';
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, e.offsetX, e.offsetY);
+    setTimeout(() => document.body.removeChild(ghost), 0);
   }
 
   function dragend(e) {
     e.target.classList.remove('dragging');
-    document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+    document.querySelectorAll('.drag-over, .list-drop-over').forEach(el => el.classList.remove('drag-over', 'list-drop-over'));
   }
 
   function dragover(e) {
@@ -114,12 +123,22 @@
     send({ type: 'todo_list_delete', name });
   }
 
-  function moveTo(id, targetList) {
-    send({ type: 'todo_move', id, to: targetList, list: $todoActiveList });
+  function listDragOver(e) {
+    e.preventDefault();
+    e.currentTarget.classList.add('list-drop-over');
   }
 
-  function otherLists() {
-    return $todoListNames.filter(n => n !== $todoActiveList);
+  function listDragLeave(e) {
+    e.currentTarget.classList.remove('list-drop-over');
+  }
+
+  function listDrop(e, listName) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('list-drop-over');
+    if (dragFrom !== null && listName !== $todoActiveList) {
+      send({ type: 'todo_move', id: dragFrom, to: listName, list: $todoActiveList });
+    }
+    dragFrom = null;
   }
 </script>
 
@@ -127,7 +146,10 @@
   {#each $todoListNames as name}
     <button class="todo-list-btn" class:active={name === $todoActiveList}
       onclick={() => setList(name)}
-      ondblclick={() => renameList(name)}>
+      ondblclick={() => renameList(name)}
+      ondragover={listDragOver}
+      ondragleave={listDragLeave}
+      ondrop={(e) => listDrop(e, name)}>
       {esc(name)}
       {#if $todoListNames.length > 1 && name !== 'default'}
         <span class="list-delete" role="button" tabindex="0"
@@ -160,14 +182,6 @@
         <span class="todo-text" role="button" tabindex="-1" ondblclick={(e) => startEdit(e.currentTarget.closest('li'), i)}>
           {esc(item)}
         </span>
-        {#if otherLists().length > 0}
-          <select class="todo-move" onchange={(e) => moveTo(i, e.target.value)}>
-            <option value="" disabled selected>Move to...</option>
-            {#each otherLists() as target}
-              <option value={target}>{esc(target)}</option>
-            {/each}
-          </select>
-        {/if}
         <button class="todo-remove" onclick={() => remove(i)}>✕</button>
       </li>
     {/each}
@@ -186,6 +200,7 @@
   }
   .todo-list-btn:hover { background: #30363d; }
   .todo-list-btn.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  :global(.todo-list-btn.list-drop-over) { border-color: #58a6ff; box-shadow: 0 0 6px #58a6ff; }
   .todo-list-add { font-size: 1.1rem; font-weight: 700; padding: 4px 10px; }
   .list-delete {
     font-size: 0.7rem; color: #f85149; margin-left: 2px;
@@ -219,15 +234,9 @@
     border-radius: 4px; cursor: pointer; font-weight: 600;
   }
   .todo-remove:hover { background: #da3633; color: #fff; }
-  .todo-move {
-    padding: 2px 6px; font-size: 0.78rem;
-    background: #0d1117; color: #c9d1d9; border: 1px solid #30363d;
-    border-radius: 4px; cursor: pointer;
-  }
-  .todo-move:hover { border-color: #58a6ff; }
   .todo-empty { color: #8b949e; font-size: 0.9rem; padding: 20px 0; }
 
-  :global(.dragging) { opacity: 0.4; }
+  :global(.dragging) { opacity: 0.15; }
   :global(.drag-over) { border-top: 2px solid #58a6ff; }
 
   :global(.todo-edit-input) {
