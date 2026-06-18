@@ -20,7 +20,8 @@
     "Add REST api",
     "add authentication",
     "support https",
-    "provide a url for each tab"
+    "provide a url for each tab",
+    "improve the api, split up the service and the action (todo_add -> todo/add)"
   ],
   "todo-features": [
     "move items by dragging",
