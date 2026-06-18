@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { todos, send } from '../lib/ws.js';
+  import { todos, todoListNames, todoActiveList, send } from '../lib/ws.js';
 
   let newText = '';
   let dragFrom = null;
@@ -89,10 +89,58 @@
       if (e.key === 'Escape') input.value = original;
     });
   }
+
+  function setList(name) {
+    send({ type: 'todo_set_list', list: name });
+  }
+
+  function createList() {
+    const name = prompt('New list name:');
+    if (name && name.trim()) {
+      send({ type: 'todo_list_create', name: name.trim() });
+    }
+  }
+
+  function renameList(oldName) {
+    const name = prompt('Rename list to:', oldName);
+    if (name && name.trim() && name.trim() !== oldName) {
+      send({ type: 'todo_list_rename', old: oldName, name: name.trim() });
+    }
+  }
+
+  function deleteList(name) {
+    if (name === 'default') return;
+    if (!confirm(`Delete list "${name}"?`)) return;
+    send({ type: 'todo_list_delete', name });
+  }
+
+  function moveTo(id, targetList) {
+    send({ type: 'todo_move', id, to: targetList });
+  }
+
+  function otherLists() {
+    return $todoListNames.filter(n => n !== $todoActiveList);
+  }
 </script>
 
+<div class="todo-lists">
+  {#each $todoListNames as name}
+    <button class="todo-list-btn" class:active={name === $todoActiveList}
+      onclick={() => setList(name)}
+      ondblclick={() => renameList(name)}>
+      {esc(name)}
+      {#if $todoListNames.length > 1 && name !== 'default'}
+        <span class="list-delete" role="button" tabindex="0"
+          onclick={(e) => { e.stopPropagation(); deleteList(name); }}
+          onkeydown={(e) => { if (e.key === 'Enter') deleteList(name); }}>✕</span>
+      {/if}
+    </button>
+  {/each}
+  <button class="todo-list-btn todo-list-add" onclick={createList}>+</button>
+</div>
+
 <div class="todo-input">
-  <input type="text" id="todoInput" placeholder="Add a task..." maxlength="200"
+  <input type="text" id="todoInput" placeholder="Add a task to {$todoActiveList}..." maxlength="200"
     bind:value={newText} onkeydown={handleKeydown}>
   <button id="todoAddBtn" onclick={add}>Add</button>
 </div>
@@ -112,6 +160,14 @@
         <span class="todo-text" role="button" tabindex="-1" ondblclick={(e) => startEdit(e.currentTarget.closest('li'), i)}>
           {esc(item)}
         </span>
+        {#if otherLists().length > 0}
+          <select class="todo-move" onchange={(e) => moveTo(i, e.target.value)}>
+            <option value="" disabled selected>Move to...</option>
+            {#each otherLists() as target}
+              <option value={target}>{esc(target)}</option>
+            {/each}
+          </select>
+        {/if}
         <button class="todo-remove" onclick={() => remove(i)}>✕</button>
       </li>
     {/each}
@@ -119,6 +175,24 @@
 </ul>
 
 <style>
+  .todo-lists {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+  .todo-list-btn {
+    padding: 4px 12px; font-size: 0.83rem; font-weight: 500;
+    background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
+    border-radius: 6px; cursor: pointer; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .todo-list-btn:hover { background: #30363d; }
+  .todo-list-btn.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  .todo-list-add { font-size: 1.1rem; font-weight: 700; padding: 4px 10px; }
+  .list-delete {
+    font-size: 0.7rem; color: #f85149; margin-left: 2px;
+    padding: 0 2px; border-radius: 3px;
+  }
+  .list-delete:hover { background: #f85149; color: #fff; }
+
   .todo-input { display: flex; gap: 8px; margin-bottom: 16px; }
   .todo-input input {
     flex: 1; max-width: 400px; padding: 8px 12px;
@@ -145,6 +219,12 @@
     border-radius: 4px; cursor: pointer; font-weight: 600;
   }
   .todo-remove:hover { background: #da3633; color: #fff; }
+  .todo-move {
+    padding: 2px 6px; font-size: 0.78rem;
+    background: #0d1117; color: #c9d1d9; border: 1px solid #30363d;
+    border-radius: 4px; cursor: pointer;
+  }
+  .todo-move:hover { border-color: #58a6ff; }
   .todo-empty { color: #8b949e; font-size: 0.9rem; padding: 20px 0; }
 
   :global(.dragging) { opacity: 0.4; }

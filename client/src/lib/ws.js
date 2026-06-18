@@ -2,6 +2,8 @@ import { writable } from 'svelte/store';
 
 export const processes = writable([]);
 export const todos = writable([]);
+export const todoListNames = writable([]);
+export const todoActiveList = writable('default');
 export const connected = writable(false);
 export const shuttingDown = writable(false);
 export const syncStates = writable({});
@@ -48,6 +50,8 @@ export function connect() {
         processes.set(data);
       } else if (data.type === 'todo_list') {
         todos.set(data.items || []);
+        todoListNames.set(data.listNames || []);
+        todoActiveList.set(data.active || 'default');
       } else if (data.type === 'sync_list') {
         syncTargets.set(data.targets || []);
       } else if (data.type === 'sync_status') {

@@ -64,10 +64,11 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<Mutex<Status>>) {
 
 async fn root_handler(State(state): State<Arc<Mutex<Status>>>) -> String {
     let state_locked = state.lock().await;
+    let count: usize = state_locked.todo_lists.values().map(|v| v.len()).sum();
     format!(
-        "state: {:?} \n todos: {}",
+        "state: {:?} \n todo items: {}",
         state_locked.state,
-        state_locked.todos.len(),
+        count,
     )
 }
 
@@ -91,7 +92,8 @@ async fn main() {
         state: ServerState::Disconnected,
         tx: tx.clone(),
         shutdown: shutdown.clone(),
-        todos: services::load_todos(),
+        todo_lists: services::load_todos(),
+        todo_active: "default".to_string(),
         syncing: HashSet::new(),
     }));
 
@@ -121,6 +123,7 @@ async fn main() {
 #[cfg(test)]
 mod integration {
     use super::*;
+    use std::collections::HashMap;
     use std::time::Duration;
 
     async fn spawn_server() -> SocketAddr {
@@ -130,7 +133,8 @@ mod integration {
             state: ServerState::Disconnected,
             tx: tx.clone(),
             shutdown: shutdown.clone(),
-            todos: vec!["test todo".to_string()],
+            todo_lists: HashMap::from([("default".to_string(), vec!["test todo".to_string()])]),
+            todo_active: "default".to_string(),
             syncing: HashSet::new(),
         }));
         services::setup_process_monitor(tx.clone());
@@ -167,7 +171,7 @@ mod integration {
         stream.read_to_string(&mut response).await.unwrap();
 
         assert!(response.contains("200 OK"));
-        assert!(response.contains("todos: 1"));
+        assert!(response.contains("todo items: 1"));
         assert!(response.contains("Disconnected"));
     }
 

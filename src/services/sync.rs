@@ -282,6 +282,7 @@ async fn run_sync_for_target(target: &SyncTarget, direction: &str) -> Result<Str
 mod tests {
     use super::*;
     use crate::services::types::ServerState;
+    use std::collections::HashMap;
     use std::collections::HashSet;
     use std::time::Duration;
     use tokio::sync::broadcast::channel;
@@ -303,7 +304,8 @@ mod tests {
             state: ServerState::Disconnected,
             tx,
             shutdown: Arc::new(Notify::new()),
-            todos: vec![],
+            todo_lists: HashMap::new(),
+            todo_active: "default".to_string(),
             syncing: HashSet::new(),
         }));
 
@@ -335,7 +337,8 @@ mod tests {
             state: ServerState::Disconnected,
             tx,
             shutdown: Arc::new(Notify::new()),
-            todos: vec![],
+            todo_lists: HashMap::new(),
+            todo_active: "default".to_string(),
             syncing: HashSet::new(),
         }));
 
@@ -361,7 +364,8 @@ mod tests {
             state: ServerState::Disconnected,
             tx,
             shutdown: Arc::new(Notify::new()),
-            todos: vec![],
+            todo_lists: HashMap::new(),
+            todo_active: "default".to_string(),
             syncing: HashSet::new(),
         }));
 
@@ -380,7 +384,8 @@ mod tests {
             state: ServerState::Disconnected,
             tx,
             shutdown: Arc::new(Notify::new()),
-            todos: vec![],
+            todo_lists: HashMap::new(),
+            todo_active: "default".to_string(),
             syncing: HashSet::from(["Old".to_string()]),
         }));
 
@@ -401,7 +406,8 @@ mod tests {
             state: ServerState::Disconnected,
             tx,
             shutdown: Arc::new(Notify::new()),
-            todos: vec![],
+            todo_lists: HashMap::new(),
+            todo_active: "default".to_string(),
             syncing: HashSet::from(["Existing".to_string()]),
         }));
 

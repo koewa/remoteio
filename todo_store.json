@@ -1,14 +1,23 @@
-[
-  "Add REST api",
-  "make multiple lists of todos",
-  "add authentication",
-  "support https",
-  "make a chat application",
-  "recepten boekje",
-  "backup-cancel sync",
-  "backup-show progress",
-  "backup-show if the target is already in sync",
-  "backup-be able to select only parts of the files to be synced",
-  "backup-show the preview as a hierarchical view (expandable, indicating the amount of children)",
-  "server-be able to shutdown servers/laptops"
-]
+{
+  "server-features": [
+    "backup/server: show disks and disk space",
+    "server-be able to shutdown servers/laptops",
+    "servers-show upgrade state"
+  ],
+  "new-ideas": [
+    "recepten boekje",
+    "make a chat application"
+  ],
+  "sync-features": [
+    "backup-cancel sync",
+    "backup-show if the target is already in sync",
+    "backup-show progress",
+    "backup-show the preview as a hierarchical view (expandable, indicating the amount of children)",
+    "backup-be able to select only parts of the files to be synced"
+  ],
+  "general-improvements": [
+    "Add REST api",
+    "add authentication",
+    "support https"
+  ]
+}
